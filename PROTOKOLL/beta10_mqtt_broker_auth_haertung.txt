@@ -1,0 +1,53 @@
+Stand: beta10
+Datei: beta10_mqtt_broker_auth_haertung.txt
+Datum: 2026-03-10
+Autor: Codex
+
+1. Anlass
+- Die bestehende Serverbasis sollte den lokalen MQTT-Broker sauber haerten koennen, ohne Passwoerter oder lokale Zugangsdaten ins Repo zu ziehen.
+- Der Eingriff durfte nur Broker-/Compose-/Config-Haertung plus notwendige Doku betreffen.
+
+2. Befund vor der Aenderung
+- Mosquitto lief nur mit `allow_anonymous true`.
+- Es gab zwar bereits einen ignorierten lokalen Ordner `server/config/mosquitto/config/`, aber keine sauber verdrahtete Aktivierungsstrecke fuer lokale Passwort-Auth.
+- Der Broker-Healthcheck und die bestehende Node-RED-MQTT-Anbindung waren rein anonym ausgelegt. Eine lokale Passwortpflicht haette den Compose-Start deshalb real brechen koennen.
+
+3. Aenderung
+- `server/config/mosquitto/mosquitto.conf` bleibt die einzige versionierte Broker-Vorlage und bindet jetzt am Ende den ignorierten lokalen Ordner `/mosquitto/config/local` ein.
+- `server/docker-compose.yml` mountet genau diesen lokalen Ordner als einzige lokale Broker-Erweiterungsstelle in den Mosquitto-Container.
+- `server/.env.example` enthaelt jetzt nur leere Platzhalter fuer optionale lokale `MQTT_USERNAME`- und `MQTT_PASSWORD`-Werte.
+- Der Mosquitto-Healthcheck verwendet dieselben lokalen MQTT-Credentials automatisch, falls beide gesetzt sind; ohne lokale Auth bleibt er anonym.
+- Die bestehende Node-RED-MQTT-Broker-Konfiguration nimmt optional dieselben lokalen MQTT-Credentials aus `.env`, ohne den MQTT-Vertrag zu aendern. Der Node-RED-Entry-Point erzeugt daraus zur Laufzeit die passende `flows_cred.json`.
+- Die Server-Doku beschreibt jetzt den lokalen Auth-Startpfad ueber zwei bewusst nicht versionierte Dateien:
+  - `server/config/mosquitto/config/10-auth.conf`
+  - `server/config/mosquitto/config/passwd`
+- Die lokale `passwd`-Datei bleibt nur die Quelle im ignorierten Ordner und wird beim Containerstart nach `/mosquitto/data/passwd` kopiert, damit Mosquitto saubere Laufzeitrechte bekommt.
+
+4. Begründung
+- Der Repo-Default muss weiter ohne lokale Secrets startbar bleiben.
+- Lokale Passwort-Auth braucht trotzdem eine offizielle, nachvollziehbare Aktivierungsstrecke statt stiller Bastel-Overrides.
+- Eine Auth-Option ist nur dann sauber, wenn Broker, Healthcheck und bestehender MQTT-Client im Server dieselbe lokale Konfiguration verstehen.
+
+5. Verbesserungseffekt
+- Die Serverbasis bleibt oeffentlich versionierbar und lokal testbar.
+- Broker-Authentifizierung kann jetzt bewusst lokal zugeschaltet werden, ohne zweite offizielle Compose- oder Mosquitto-Struktur.
+- Repo-Zustand und lokale Laufzeitdaten sind deutlicher getrennt.
+
+6. Risiken / Trade-offs
+- Die versionierte Basis bleibt absichtlich anonym startbar; echte Passwortpflicht ist weiter eine lokale Betriebsentscheidung.
+- TLS, ACL-Dateien und weitergehende Broker-Haertung sind bewusst noch nicht Teil dieser Stufe.
+- Node-RED nutzt dieselben lokalen MQTT-Credentials; bei falschen lokalen `.env`-Werten scheitert die Broker-Anbindung korrekt statt still.
+
+7. Teststatus
+- `docker compose config` mit lokaler Test-`.env`
+- realer `docker compose up --build -d` gegen einen frischen lokalen Test-Stack
+- realer MQTT-Publish und MQTT-Subscribe gegen den lokalen Broker mit Passwort-Auth
+- `docker compose down -v` zum Aufraeumen des Test-Stacks
+
+8. Lehrerblick
+- Welche Eigenleistung steckt in diesem Stand?
+- Die lokale Auth-Strecke wurde auf die bestehende Compose-/Mosquitto-/Node-RED-Basis zugeschnitten und real auf Startbarkeit geprueft.
+- Was wurde nur als Referenz genutzt?
+- Nur die vorhandene Repo-Struktur, bestehende Startdoku und die bestehende Serverbasis.
+- Warum ist der Stand fachlich nachvollziehbar?
+- Weil die einzige offizielle Compose- und Broker-Vorlage erhalten blieb und die Passwortpflicht trotzdem reproduzierbar lokal aktiviert werden kann.

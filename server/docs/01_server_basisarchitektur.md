@@ -7,6 +7,13 @@
 - InfluxDB fuer Sensor-Zeitreihen
 - SQLite fuer operative Serverdaten
 
+## Broker-Betrieb V1
+
+- `server/config/mosquitto/mosquitto.conf` bleibt die einzige versionierte Broker-Vorlage
+- der Repo-Default bleibt anonym startbar, damit keine lokalen Zugangsdaten ins Repo muessen
+- lokale Passwortpflicht wird nur ueber ignorierte Dateien unter `server/config/mosquitto/config/` aktiviert
+- MQTT-Vertrag, Topic-Baum und Payload-Semantik bleiben dabei unveraendert
+
 ## Datenfluss
 
 1. Master publiziert unter `smarthome/master/<master_id>/...` und `smarthome/node/<node_id>/...`

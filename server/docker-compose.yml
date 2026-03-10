@@ -2,14 +2,34 @@ services:
   mosquitto:
     image: eclipse-mosquitto:2
     restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        if [ -f /mosquitto/config/local/passwd ]; then
+          cp /mosquitto/config/local/passwd /mosquitto/data/passwd
+          chown mosquitto:mosquitto /mosquitto/data/passwd
+          chmod 0700 /mosquitto/data/passwd
+        else
+          rm -f /mosquitto/data/passwd
+        fi
+        exec /docker-entrypoint.sh mosquitto -c /mosquitto/config/mosquitto.conf
+    environment:
+      MQTT_USERNAME: "${MQTT_USERNAME:-}"
+      MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
     ports:
       - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_HOST_PORT:-1883}:1883"
     volumes:
       - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/mosquitto/config:/mosquitto/config/local:ro
       - mosquitto_data:/mosquitto/data
       - mosquitto_log:/mosquitto/log
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -n \"$$MQTT_USERNAME\" ] && [ -n \"$$MQTT_PASSWORD\" ]; then mosquitto_sub -h 127.0.0.1 -u \"$$MQTT_USERNAME\" -P \"$$MQTT_PASSWORD\" -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1; else mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1; fi || exit 1"
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -49,6 +69,8 @@ services:
       PORT: 1880
       MQTT_HOST: "${MQTT_HOST:-mosquitto}"
       MQTT_PORT: "1883"
+      MQTT_USERNAME: "${MQTT_USERNAME:-}"
+      MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
       MQTT_BASE_TOPIC: "${MQTT_BASE_TOPIC:-smarthome}"
       SQLITE_PATH: /data/sqlite/smarthome.sqlite
       NODERED_CREDENTIAL_SECRET: "${NODERED_CREDENTIAL_SECRET:-change-me-local-only}"

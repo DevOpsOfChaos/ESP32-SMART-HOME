@@ -5,6 +5,7 @@ Die technische Wahrheit fuer die laufende Node-RED-Basis liegt in:
 - `server/nodered/build-flows.js`
 
 Der Generator erzeugt die produktive `flows.json` beim Image-Build.
+Wenn lokale Broker-Authentifizierung aktiviert ist, erzeugt `server/nodered/entrypoint.sh` beim Containerstart aus `MQTT_USERNAME`, `MQTT_PASSWORD` und `NODERED_CREDENTIAL_SECRET` die laufzeitseitige `flows_cred.json`.
 
 Nicht Teil des versionierten Repo-Bestands:
 
