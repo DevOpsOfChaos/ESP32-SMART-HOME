@@ -35,6 +35,10 @@ wifi*.h
 secrets_local.h
 credentials*.h
 
+# Oeffentliche Beispiel-Dateien muessen versionierbar bleiben
+!firmware/include/Secrets.example.h
+!server/config/.env.example
+
 # Server Secrets und Laufzeitdaten
 server/config/.env
 server/config/*.local.*
