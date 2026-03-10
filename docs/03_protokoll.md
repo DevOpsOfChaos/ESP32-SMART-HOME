@@ -6,7 +6,8 @@ Ein kleines, einheitliches und erweiterbares ESP-NOW-Protokoll für alle Basisge
 ## Implementierungsstatus
 - Definitionen in `firmware/lib/ShProtocol/src/Protocol.h`
 - Geräteklassen und Fähigkeiten in `firmware/lib/ShProtocol/src/DeviceTypes.h`
-- Noch keine Laufzeitimplementierung (Phase 2)
+- Minimalstrecke `net_erl_01 <-> master` ist seit `beta03` real implementiert
+- Breitere Laufzeitimplementierung für weitere Geräte bleibt offen
 
 ## Feste Nachrichtentypen
 - `HELLO`     (0x01) – Node-Anmeldung bei Boot / periodisch
@@ -17,6 +18,7 @@ Ein kleines, einheitliches und erweiterbares ESP-NOW-Protokoll für alle Basisge
 - `CFG`       (0x06) – Konfigurationsänderung Master -> Node
 - `ACK`       (0x07) – Quittung (beide Richtungen)
 - `TIME`      (0x08) – Zeitabgleich Master -> Nodes
+- `HEARTBEAT` (0x09) – zyklischer Lebensnachweis Node -> Master
 
 ## Header (10 Bytes, alle Pakete)
 | Feld       | Bytes | Inhalt |
@@ -35,13 +37,14 @@ Verfügbare Payload-Bytes: 250 – 10 = **240 Bytes max.**
 ## Feste Payload-Größen
 | Typ      | Payload-Bytes |
 |---|---|
-| HELLO    | 52 |
+| HELLO    | 58 |
 | HELLO_ACK| 4 |
+| HEARTBEAT| 20 |
 | CMD      | 4 |
 | CFG      | 4 |
 | ACK      | 4 |
 | TIME     | 8 |
-| STATE    | variabel, TLV |
+| STATE    | 20 in der Minimalstrecke, später variabel/TLV |
 | EVENT    | variabel, TLV |
 
 ## TLV-Regel

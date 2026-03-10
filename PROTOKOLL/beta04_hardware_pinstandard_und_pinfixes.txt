@@ -1,0 +1,59 @@
+Stand: beta04
+Datei: beta04_hardware_pinstandard_und_pinfixes.txt
+Datum: 2026-03-10
+Autor: Codex
+
+1. Anlass
+- Feste Hardware-Pinregeln der aktuellen Platinen mussten verbindlich
+  dokumentiert und in die bestehende Firmware uebernommen werden.
+- Der Pilot-Test der Minimalstrecke durfte nicht weiter an
+  `PIN_RELAY_1 = -1` fuer `net_erl` scheitern.
+
+2. Aenderung
+- Neuer zentraler Firmware-Header:
+  `firmware/include/HardwarePinStandard.h`
+- Neuer technischer Standard:
+  `docs/15_hardware_pinstandard.md`
+- `net_erl`, `net_zrl`, `net_sen`, `bat_sen` und `master` uebernehmen
+  den festen I2C-Standard `GPIO0/GPIO1`.
+- Der interne NeoPixel ist als fester Board-Pin `GPIO8` zentral
+  hinterlegt und in den Board-PinConfigs vorbereitet.
+- Relais-Boards nutzen jetzt verbindlich:
+  `Relais 1 = GPIO10`
+  `Relais 2 = GPIO5`
+- `bat_sen` fuehrt den festen Batterie-ADC-Pin `GPIO4`.
+- `net_erl` loggt beim Start und beim Schalten den realen Relais-Pin.
+
+3. Begruendung
+- Die bisherigen `-1`-Platzhalter fuer feste Hardwarevorgaben waren
+  kein "spaeter", sondern ein konkreter Bring-up-Fehler.
+- Ohne zentralen Standard driftet jede Board-Datei frueher oder spaeter
+  auseinander.
+
+4. Verbesserungseffekt
+- `net_erl` ist fuer die Minimalstrecke hardwareseitig sauber auf
+  `GPIO10` festgelegt.
+- Die Pinregeln sind jetzt an einer fachlichen Stelle dokumentiert und
+  an einer technischen Stelle im Firmware-Code zentral referenziert.
+- Neue Firmware muss feste Pins nicht mehr erraten oder duplizieren.
+
+5. Risiken / Trade-offs
+- Keine neue Laufzeitfunktion. Nur Dokumentation und Pin-Festlegung.
+- ADC-Kalibrierung fuer `bat_sen` bleibt weiterhin offen; festgelegt ist
+  jetzt nur der Anschluss-Pin `GPIO4`.
+- Der interne NeoPixel ist vorbereitet, aber noch nicht als Statuslogik
+  implementiert.
+
+6. Teststatus
+- Erfolgreich gebaut:
+  `platformio run -e master -e net_erl -e net_zrl -e net_sen -e bat_sen`
+- Nicht durchgefuehrt:
+  Flash auf Hardware, realer Relais-Schalttest, I2C-Sensortest,
+  NeoPixel-Test, Batterie-Messpfad auf realer Hardware.
+
+7. Lehrerblick
+- Das ist keine Feature-Produktion, sondern Aufraeumarbeit an einer
+  realen technischen Sollbruchstelle.
+- Eigenleistung steckt hier in der sauberen Rueckfuehrung von
+  Hardwarevorgaben in Dokumentation und bestehende Firmware statt in
+  unnötiger neuer Architektur.

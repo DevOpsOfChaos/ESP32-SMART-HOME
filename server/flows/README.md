@@ -7,16 +7,20 @@ Dieser Ordner enthält Node-RED-Flows für das SmartHome-System.
 Diese Flows sind **Neuaufbau**, kein Altflow-Import.
 Die alte Flow-Struktur war an alte Geräte-IDs und veraltete JSON-Felder gebunden.
 
-## Geplante Flows (Phase 3 und später)
+## Zielstruktur
 
-| Datei | Zweck |
+Die spaetere Flow-Struktur folgt funktionalen Modulen statt gewachsener Sammel-Tabs:
+
+| Bereich | Zweck |
 |---|---|
-| `10_mqtt_empfang.json` | MQTT-Eingangsnormalisierung für alle Geräte |
-| `20_state_speichern.json` | STATE-Werte in SQLite schreiben |
-| `30_availability.json` | Online/Offline-Status weiterverarbeiten |
-| `40_automationen.json` | Regeln: Licht, Rolladen, Meldungen |
-| `50_dashboard.json` | Visualisierung (Node-RED Dashboard) |
-| `60_api.json` | Externe REST-API für spätere Apps |
+| `10_ingest` | MQTT-Eingang validieren und normalisieren |
+| `20_registry` | `meta` und `status` in Registry uebernehmen |
+| `30_state_store` | aktuellen `status` und `state` in SQLite halten |
+| `40_time_series` | relevante Messwerte nach InfluxDB schreiben |
+| `50_automation` | serverseitige Regeln ausfuehren |
+| `60_dashboard` | FlowFuse-Dashboard-Daten und UI-Aktionen |
+| `70_weather` | Wetterdaten holen, normalisieren und publizieren |
+| `80_logging` | Audit, Fehlerbilder und Ereignisprotokolle |
 
 ## Regeln für neue Flows
 
@@ -25,11 +29,5 @@ Die alte Flow-Struktur war an alte Geräte-IDs und veraltete JSON-Felder gebunde
 - Device-IDs kommen aus den MQTT-Topics, nie hardkodiert im Flow
 - Keine privaten Daten im Flow speichern (Passwörter über Umgebungsvariablen)
 - Jeder Flow-Tab bekommt einen beschreibenden Namen
-
-## Offene Entscheidungen
-
-- Dashboard-Technologie: Node-RED Dashboard 2.x oder externe App?
-- Historisierung: SQLite ausreichend oder InfluxDB für Zeitreihen?
-- Notification-Kanal: Pushover, Telegram oder anderes?
-
-Diese Fragen werden vor Phase 3 entschieden und hier eingetragen.
+- FlowFuse Dashboard ist gesetzt; deprecated `node-red-dashboard` ist keine Option.
+- SQLite ist operative Datenhaltung, InfluxDB ist Zeitreihenspeicher.

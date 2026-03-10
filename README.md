@@ -12,6 +12,13 @@ Es ist die neue, veröffentlichbare Arbeitsbasis für:
 - Dokumentation, Testplanung und Änderungsprotokolle
 - saubere GitHub- und Secrets-Trennung
 
+## Aktueller lauffaehiger Stand
+Stand 2026-03-10:
+- minimale Vertikalstrecke `net_erl_01 -> master -> MQTT -> master -> net_erl_01`
+- genau ein Pilotgeraet, keine Ausweitung auf weitere Nodes oder Komfortfunktionen
+- Kurzbeschreibung, Testablauf und Grenzen: `docs/14_minimalstrecke_net_erl_master.md`
+- verbindlicher Hardware-Pinstandard: `docs/15_hardware_pinstandard.md`
+
 ## Projektprinzip
 Das System bleibt strikt in drei Ebenen getrennt:
 

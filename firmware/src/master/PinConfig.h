@@ -1,14 +1,12 @@
 #pragma once
 
+#include "../../include/HardwarePinStandard.h"
+
 // ============================================================
 // Master – Pinbelegung
 // ============================================================
-// Finale Pinbelegung nach Hardwareentscheidung.
-// -1 bedeutet: dieser Pin ist für diesen Hardwarestand nicht
-// belegt oder noch nicht festgelegt.
-//
-// Hinweis: Der Master hat keine Relais und keine Sensoren.
-// Er benötigt nur Status-LED und Reset-Taster.
+// Der Master nutzt keine Relais und aktuell keine Sensorik.
+// Feste Board-Standards bleiben trotzdem zentral hinterlegt.
 // ============================================================
 
 // Status-LED (optional).
@@ -22,5 +20,6 @@ constexpr int PIN_BUTTON_1   = -1;
 // Nicht genutzt auf dem Master:
 constexpr int PIN_RELAY_1    = -1;
 constexpr int PIN_RELAY_2    = -1;
-constexpr int PIN_SENSOR_SDA = -1;
-constexpr int PIN_SENSOR_SCL = -1;
+constexpr int PIN_SENSOR_SDA = SmartHome::HardwarePinStandard::PIN_I2C_SDA;
+constexpr int PIN_SENSOR_SCL = SmartHome::HardwarePinStandard::PIN_I2C_SCL;
+constexpr int PIN_INTERNAL_NEOPIXEL = SmartHome::HardwarePinStandard::GPIO_INTERNAL_NEOPIXEL;

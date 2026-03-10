@@ -111,8 +111,8 @@ void sendeEvent(uint8_t event_type, uint8_t trigger) {
 
 /**
  * Batteriespannung messen und Prozentwert berechnen.
- * Platzhalter: ADC-Kalibrierung und Spannungsteiler-Berechnung
- * müssen je Platine angepasst werden.
+ * GPIO4 ist der feste ADC-Eingang fuer den Spannungsteiler.
+ * Platzhalter bleiben nur Kalibrierung und Umrechnung.
  */
 void messeBatterie() {
     if (PIN_BATTERY_ADC < 0) {
@@ -183,6 +183,7 @@ void gibStartmeldungAus() {
     Serial.print(DATEI_GERAET); Serial.print(" v"); Serial.println(DATEI_VERSION);
     Serial.print("ID: "); Serial.println(DEVICE_ID);
     Serial.print("Schlafintervall: "); Serial.print(SLEEP_INTERVAL_S); Serial.println(" s");
+    Serial.print("Battery ADC GPIO: "); Serial.println(PIN_BATTERY_ADC);
     Serial.println("================================");
 }
 

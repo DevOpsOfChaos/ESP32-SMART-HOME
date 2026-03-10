@@ -1,0 +1,10 @@
+{
+  "name": "smarthome-server-nodered",
+  "private": true,
+  "description": "Node-RED runtime for SmartHome Server V1",
+  "dependencies": {
+    "@flowfuse/node-red-dashboard": "^1.29.0",
+    "node-red-node-sqlite": "^1.1.1"
+  }
+}
+

@@ -119,6 +119,10 @@
 // Ermöglicht lokale Zeitstempel auf Nodes ohne eigene RTC.
 #define SH_MSG_TIME            0x08U
 
+// Node -> Master: Periodischer Lebensnachweis.
+// Hält die Minimalstrecke online und treibt den Offline-Timeout.
+#define SH_MSG_HEARTBEAT       0x09U
+
 // ============================================================
 // Flags im Header (flags-Byte)
 // ============================================================
@@ -164,6 +168,9 @@
 
 // Neustart des Nodes auslösen (nur im Wartungskontext).
 #define SH_CMD_REBOOT          0x04U
+
+// Lesbarer Alias für die Minimalstrecke.
+#define SH_CMD_SET_RELAY       SH_CMD_RELAY
 
 // ============================================================
 // CFG-Parameter-IDs (param_id im CFG-Payload)
@@ -493,7 +500,7 @@ static_assert(sizeof(MsgHeader) == SH_HEADER_SIZE,
     "MsgHeader muss exakt SH_HEADER_SIZE Bytes groß sein");
 
 // ───────────────────────────────────────────────────────────────
-// HELLO-Payload (feste Struktur, 52 Bytes)
+// HELLO-Payload (feste Struktur, 58 Bytes)
 // ───────────────────────────────────────────────────────────────
 //
 // Einziger Pakettyp, der Strings trägt.
@@ -517,8 +524,8 @@ typedef struct __attribute__((packed)) {
     uint32_t boot_counter;  // Boot-Zähler aus NVS
 } HelloPayload;
 
-static_assert(sizeof(HelloPayload) == 52,
-    "HelloPayload muss 52 Bytes groß sein");
+static_assert(sizeof(HelloPayload) == 58,
+    "HelloPayload muss 58 Bytes groß sein");
 
 // ───────────────────────────────────────────────────────────────
 // HELLO_ACK-Payload (feste Struktur, 4 Bytes)
@@ -535,6 +542,20 @@ typedef struct __attribute__((packed)) {
 
 static_assert(sizeof(HelloAckPayload) == 4,
     "HelloAckPayload muss 4 Bytes groß sein");
+
+// ───────────────────────────────────────────────────────────────
+// HEARTBEAT-Payload (feste Struktur, 20 Bytes)
+// ───────────────────────────────────────────────────────────────
+//
+// Minimaler Lebensnachweis des Nodes an den Master.
+
+typedef struct __attribute__((packed)) {
+    char     node_id[SH_DEVICE_ID_LEN];
+    uint32_t uptime_s;
+} HeartbeatPayload;
+
+static_assert(sizeof(HeartbeatPayload) == 20,
+    "HeartbeatPayload muss 20 Bytes groß sein");
 
 // ───────────────────────────────────────────────────────────────
 // CMD-Payload (feste Struktur, 4 Bytes)
@@ -611,6 +632,22 @@ typedef struct __attribute__((packed)) {
 
 static_assert(sizeof(TimePayload) == 8,
     "TimePayload muss 8 Bytes groß sein");
+
+// ───────────────────────────────────────────────────────────────
+// STATE_REPORT-Payload (feste Struktur, 20 Bytes)
+// ───────────────────────────────────────────────────────────────
+//
+// Minimale Zustandsmeldung für die erste Vertikalstrecke.
+
+typedef struct __attribute__((packed)) {
+    char     node_id[SH_DEVICE_ID_LEN];
+    uint8_t  relay_1;
+    uint8_t  fault;
+    uint8_t  _pad[2];
+} StateReportPayload;
+
+static_assert(sizeof(StateReportPayload) == 20,
+    "StateReportPayload muss 20 Bytes groß sein");
 
 // ───────────────────────────────────────────────────────────────
 // TLV-Eintrag (STATE und EVENT)
@@ -806,6 +843,53 @@ static inline uint16_t calcCrc16(const uint8_t* data, uint16_t len) {
         }
     }
     return crc;
+}
+
+/**
+ * Berechnet die CRC16 für ein komplettes Paket aus Header und Payload.
+ * Das crc16-Feld des Headers wird dabei intern auf 0 gesetzt.
+ */
+static inline uint16_t calcPacketCrc(
+    const MsgHeader& header,
+    const uint8_t* payload)
+{
+    MsgHeader temp = header;
+    temp.crc16 = 0;
+
+    uint8_t buffer[SH_ESPNOW_MAX_BYTES] = {0};
+    memcpy(buffer, &temp, sizeof(MsgHeader));
+
+    if (temp.payload_len > 0 && payload != nullptr) {
+        memcpy(buffer + sizeof(MsgHeader), payload, temp.payload_len);
+    }
+
+    return calcCrc16(buffer, (uint16_t)(sizeof(MsgHeader) + temp.payload_len));
+}
+
+/**
+ * Finalisiert die CRC eines ausgehenden Pakets.
+ */
+static inline void finalizePacketCrc(
+    MsgHeader& header,
+    const uint8_t* payload)
+{
+    header.crc16 = calcPacketCrc(header, payload);
+}
+
+/**
+ * Prüft ein komplettes Paket inklusive CRC16.
+ */
+static inline bool hasValidPacketCrc(const uint8_t* packet, size_t len) {
+    if (!packet || len < sizeof(MsgHeader)) return false;
+
+    MsgHeader header;
+    memcpy(&header, packet, sizeof(MsgHeader));
+
+    if (!isValidHeader(header)) return false;
+    if (len != (sizeof(MsgHeader) + header.payload_len)) return false;
+
+    const uint8_t* payload = packet + sizeof(MsgHeader);
+    return calcPacketCrc(header, payload) == header.crc16;
 }
 
 } // namespace SmartHome

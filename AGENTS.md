@@ -1,67 +1,73 @@
 # AGENTS.md
 
-## Projekt
-Neubasis fuer ein modulares Smart-Home-System auf ESP32-Basis fuer das Technikerprojekt. Dieses Repository ist die veroeffentlichbare Arbeitsbasis und nicht die Fortsetzung des Altprojekts.
+## Rolle dieser Datei
+Zentrale Arbeitsanweisung fuer Codex im Repo `C:\Users\mries\Documents\Playground\smarthome-esp32`.
+Ziel ist, dass neue Tasks meist nur noch aus der konkreten Einzelaufgabe bestehen.
 
-## Vor dem Arbeiten lesen
-1. `README.md`
-2. `AGENTS.md`
+## Projektzweck
+- Neubasis fuer das Smart-Home-Technikerprojekt.
+- Oeffentliches, GitHub-taugliches Repository.
+- Aktive Entwicklung nur lokal im Repo unter `Documents\Playground`; keine privaten Daten im Repo.
+
+## Pflichtlektuere pro Task
+1. `AGENTS.md`
+2. `README.md`
 3. `docs/PROJECT_CONTEXT.md`
 4. `docs/CURRENT_SPRINT.md`
 5. `docs/TASK_QUEUE.md`
 6. `docs/DECISIONS.md`
+7. Falls im Scope: Bereichs-`AGENTS.md` in `firmware/`, `server/` oder `docs/`
 
-## Architekturregeln
+## Architekturgrenzen
 - Nodes sprechen nur ESP-NOW.
-- Master ist die Bridge zwischen ESP-NOW und MQTT.
-- Server ist getrennt und spricht nicht direkt mit Nodes.
+- Master ist die einzige Bridge zwischen ESP-NOW und MQTT.
+- Server bleibt getrennt; kein direkter Node-Zugriff.
 - Kein MQTT in Nodes.
-- Keine Sonderarchitektur pro Geraet, sondern Basisklassen mit klaren Erweiterungen.
+- Altbestand nur als Referenz nutzen, nie blind uebernehmen.
+- `net_zrl` bleibt allgemeine Zwei-Relais-Basis; Cover-Logik nur im Cover-Modus.
+- Keine Speziallogik anderer Geraete in die `net_erl`-Minimalstrecke ziehen.
 
-## Arbeitsregeln fuer Codex
+## Arbeitsweise fuer Codex
 - Erst lesen, dann aendern.
+- Kleine, klar abgegrenzte Aufgaben bevorzugen.
+- Nur die fuer die Aufgabe noetigen Dateien anfassen.
 - Keine unnoetigen Refactorings.
-- Keine Altlasten blind uebernehmen.
-- Keine Secrets ins Repo.
-- Jede relevante Aenderung dokumentieren.
-- Neue Beta-Staende im `PROTOKOLL/` pflegen.
-- Tests, Builds und Checks nur dokumentieren, wenn sie wirklich ausgefuehrt wurden.
-
-## Bevorzugte Arbeitsweise
-- Kleine, klar abgegrenzte Aufgaben.
-- Keine Parallelaenderungen an unnoetig vielen Modulen.
-- Bestehende sinnvolle Inhalte konsolidieren statt neu schreiben.
-- Wenn unklar: konservativ aendern statt Architektur neu erfinden.
-
-## Bauen und Pruefen
-Repo-Check:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\check_public_repo.ps1
-```
-
-Firmware-Build mit PlatformIO im PATH:
-
-```powershell
-cd .\firmware
-pio run -e master
-```
-
-Firmware-Build ohne `pio` im PATH:
-
-```powershell
-cd .\firmware
-& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master
-```
-
-Weitere Environments:
-- `net_erl`
-- `net_zrl`
-- `net_sen`
-- `bat_sen`
+- Keine Sammelumbauten ohne klaren Nutzen.
+- Konservativ aendern statt Architektur neu zu erfinden.
+- Keine stillen Architekturwechsel und keine grossen Umbenennungen ohne echten Grund.
+- Den Worktree sauber hinterlassen: keine eigenen Debug-Artefakte, keine halbfertigen Nebenbaustellen, keine zufaelligen Formatierwellen.
 
 ## Dokumentationspflicht
-- Architektur- oder Arbeitsregeln in `docs/DECISIONS.md` festhalten.
-- Aktiven Fokus in `docs/CURRENT_SPRINT.md` pflegen.
-- Naechste Arbeitspakete in `docs/TASK_QUEUE.md` pflegen.
-- Beta-Staende und relevante technische Schritte in `PROTOKOLL/` dokumentieren.
+- Relevante Aenderungen knapp dokumentieren.
+- Neue Beta-Staende in `PROTOKOLL/` nach bestehendem Schema pflegen.
+- `docs/CURRENT_SPRINT.md` und `docs/TASK_QUEUE.md` nur aendern, wenn sich realer Fokus oder Prioritaeten verschieben.
+- `docs/DECISIONS.md` nur fuer dauerhafte Architektur- oder Arbeitsentscheidungen erweitern.
+- Doku nicht aufblasen.
+- Keine Fake-Tests, keinen Fake-Fortschritt und nichts als erledigt markieren, was nicht real erledigt ist.
+
+## Repo- und Security-Regeln
+- Keine Secrets, Tokens, Passwoerter, WLAN-Daten, Mail-Zugangsdaten oder sonstige private Konfigurationsdaten committen.
+- Fuer sensible Konfigurationen nur Example-Dateien versionieren, zum Beispiel `Secrets.example.h`, `.env.example` oder `docker-compose.example.yml`.
+- OneDrive ist nicht das aktive Repo.
+- Das aktive Repo liegt lokal unter `C:\Users\mries\Documents\Playground\smarthome-esp32`.
+- GitHub ist das zentrale Remote.
+
+## Standardvorgehen pro Task
+1. Pflichtdateien und ggf. Bereichs-`AGENTS.md` lesen.
+2. Aufgabe mit minimalem Eingriff umsetzen.
+3. Relevante dokumentierte Checks ausfuehren, soweit real moeglich.
+4. Ergebnis knapp zusammenfassen: Was geaendert wurde; welche Dateien geaendert wurden; was bewusst nicht umgesetzt wurde; welche Tests gelaufen sind; welche naechsten Schritte sinnvoll sind.
+
+## Builds und Tests
+- Wenn fuer den betroffenen Bereich dokumentierte Checks existieren, diese nach Aenderungen ausfuehren.
+- Repo-Check bei Repo-, Struktur- oder Doku-Arbeiten: `powershell -ExecutionPolicy Bypass -File .\tools\check_public_repo.ps1`
+- Firmware-Builds ueber `firmware/platformio.ini` mit dem betroffenen Environment ausfuehren.
+- Keine Tests erfinden, die nicht wirklich gelaufen sind.
+- Wenn etwas nicht getestet werden konnte, klar den Grund nennen.
+
+## Verbote
+- Keine neue Architektur ohne klaren Auftrag.
+- Keine privaten Daten committen.
+- Keine grossen Umbenennungen ohne echten Grund.
+- Keine Altordner heimlich als aktive Basis reaktivieren.
+- Keine Speziallogik anderer Geraete in die `net_erl`-Minimalstrecke hineinziehen.

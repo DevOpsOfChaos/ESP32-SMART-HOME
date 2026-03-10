@@ -495,27 +495,21 @@ Neben den Ereignissen werden periodisch Zustände gesendet, damit der Master auc
 Das MQTT-Schema wird von Anfang an stabil und plattformneutral aufgebaut.
 
 ### 15.1 Topics
-- `smarthome/master/status`
-- `smarthome/<device_id>/meta`
-- `smarthome/<device_id>/availability`
-- `smarthome/<device_id>/state`
-- `smarthome/<device_id>/event`
-- `smarthome/<device_id>/ack`
-- `smarthome/<device_id>/cmd`
-- `smarthome/<device_id>/cfg`
+- `smarthome/master/...`
+- `smarthome/node/<device_id>/...`
+- `smarthome/server/weather/...`
 
 ### 15.2 Regeln
-- `meta` retained
-- `availability` retained
-- `state` retained
-- `event` nicht retained
-- `ack` nicht retained
-- `cmd` wird vom Master abonniert
-- `cfg` wird vom Master abonniert
+- `status` und `state` bleiben getrennt
+- physische Geraete werden technisch nur durch den Master bekannt gemacht
+- `meta`, `status` und `state` sind retained
+- `event`, `command`, `config` und `ack` sind nicht retained
+- nur der Server publiziert `command` und `config`; nur der Master publiziert `meta`, `status`, `state`, `event` und `ack` fuer physische Geraete
 
 ### 15.3 Grundsatz
 Der MQTT-Baum wird so gebaut, dass Node-RED sauber damit arbeiten kann.  
-Spätere Master-Anpassungen dürfen intern viel ändern, aber die Node-Grundlogik bleibt unberührt.
+Spaetere Master-Anpassungen duerfen intern viel aendern, aber die Node-Grundlogik bleibt unberuehrt.  
+Die detaillierte Vertragsdefinition steht in `docs/04_mqtt_topics.md`.
 
 ---
 

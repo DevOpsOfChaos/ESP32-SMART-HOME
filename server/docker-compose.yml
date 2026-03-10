@@ -1,0 +1,79 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: smarthome_mosquitto
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BIND_ADDRESS:-0.0.0.0}:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/version' -C 1 -W 5 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  influxdb:
+    image: influxdb:2
+    container_name: smarthome_influxdb
+    restart: unless-stopped
+    ports:
+      - "${INFLUX_BIND_ADDRESS:-127.0.0.1}:${INFLUX_PORT:-8086}:8086"
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: "${INFLUXDB_ADMIN_USERNAME:-smarthome}"
+      DOCKER_INFLUXDB_INIT_PASSWORD: "${INFLUXDB_ADMIN_PASSWORD:-change-me-influx-password}"
+      DOCKER_INFLUXDB_INIT_ORG: "${INFLUXDB_ORG:-smarthome}"
+      DOCKER_INFLUXDB_INIT_BUCKET: "${INFLUXDB_BUCKET:-smarthome_sensoren}"
+      DOCKER_INFLUXDB_INIT_RETENTION: "${INFLUXDB_BUCKET_RETENTION:-52w}"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "${INFLUXDB_ADMIN_TOKEN:-smarthome-dev-influx-token}"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://127.0.0.1:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  nodered:
+    build:
+      context: .
+      dockerfile: ./nodered/Dockerfile
+    container_name: smarthome_nodered
+    restart: unless-stopped
+    ports:
+      - "${NODERED_BIND_ADDRESS:-0.0.0.0}:${NODERED_PORT:-1880}:1880"
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
+      MQTT_BASE_TOPIC: smarthome
+      SQLITE_PATH: /data/sqlite/smarthome.sqlite
+      INFLUX_URL: http://influxdb:8086
+      INFLUX_TOKEN: "${INFLUXDB_ADMIN_TOKEN:-smarthome-dev-influx-token}"
+      INFLUX_ORG: "${INFLUXDB_ORG:-smarthome}"
+      INFLUX_BUCKET: "${INFLUXDB_BUCKET:-smarthome_sensoren}"
+      WEATHER_DEFAULT_PROVIDER: "${WEATHER_PROVIDER:-open-meteo}"
+      WEATHER_LOCATION_LABEL: "${WEATHER_LOCATION_LABEL:-}"
+      WEATHER_DEFAULT_LATITUDE: "${WEATHER_LATITUDE:-}"
+      WEATHER_DEFAULT_LONGITUDE: "${WEATHER_LONGITUDE:-}"
+      WEATHER_POLL_MINUTES: "${WEATHER_POLL_MINUTES:-15}"
+      WEATHER_API_BASE_URL: "${WEATHER_API_BASE_URL:-https://api.open-meteo.com/v1/forecast}"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    volumes:
+      - sqlite_data:/data/sqlite
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:
+  influxdb_data:
+  influxdb_config:
+  sqlite_data:

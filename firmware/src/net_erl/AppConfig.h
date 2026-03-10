@@ -18,43 +18,30 @@
 // Vorlage: firmware/include/Secrets.example.h
 // ============================================================
 
-// Geräte-ID.
-// Format: NET-ERL-001
-// Nur Laufnummer anpassen, keine Sensorbestückung reinschreiben.
-constexpr char DEVICE_ID[]   = "NET-ERL-001";
+// Feste Pilot-ID für die erste lauffähige Vertikalstrecke.
+constexpr char DEVICE_ID[]   = "net_erl_01";
 
-// Anzeigename für MQTT-meta und Node-RED.
-// Kann nach Inbetriebnahme über CFG geändert werden.
-constexpr char DEVICE_NAME[] = "Lampe Platzhalter";
+// Lesbarer Name für Logs und HELLO.
+constexpr char DEVICE_NAME[] = "NET-ERL Pilot";
 
-// Firmware-Variante.
-// Mögliche Werte: "net_erl_base", "net_erl_flur", "net_erl_kueche"
-constexpr char FW_VARIANT[]  = "net_erl_base";
+// Bewusst keine Gerätefamilie aufblasen: genau ein Pilot-Stand.
+constexpr char FW_VARIANT[]  = "net_erl_pilot";
 
 // Debug aktiv lassen in Testständen.
 constexpr bool DEVICE_DEBUG_AKTIV = true;
 
-// Meldeintervall für periodischen STATE (Millisekunden).
-// Begründung: 30 s sind ein guter Kompromiss zwischen
-// Aktualität und Funklast. Änderungen werden immer sofort
-// als EVENT gemeldet.
-constexpr unsigned long STATE_INTERVAL_MS = 30000UL;
+// HELLO wird bis zum ersten HELLO_ACK erneut versucht.
+constexpr unsigned long HELLO_RETRY_INTERVAL_MS = 5000UL;
 
-// Entprellzeit für den lokalen Taster (Millisekunden).
-// Begründung: 50 ms verhindern Prelleffekte bei üblichen
-// Mikrotastern, ohne echte Doppelklicks zu verschlucken.
-constexpr unsigned long BUTTON_DEBOUNCE_MS = 50UL;
+// HEARTBEAT hält die Online-Erkennung des Masters am Leben.
+constexpr unsigned long HEARTBEAT_INTERVAL_MS = 5000UL;
+
+// Muss mit dem Master-/AP-Kanal übereinstimmen.
+constexpr int WLAN_KANAL = 6;
 
 // Relais-Standardzustand beim Boot (0 = aus, 1 = an).
 // Begründung: Im Normalbetrieb ist "aus" der sichere Startzustand.
 constexpr bool RELAY_DEFAULT_ON_BOOT = false;
 
-// ACK-Timeout für gesendete Nachrichten (Millisekunden).
-// Begründung: 250 ms ist kurz genug für schnelle Wiederholung,
-// aber lang genug für Empfänger-Verarbeitung + ACK-Rücksendung.
-constexpr unsigned long ACK_TIMEOUT_MS = 250UL;
-
-// Maximale Anzahl ACK-Retries bevor Fehler gemeldet wird.
-// Begründung: 3 Versuche decken kurze Funkunterbrechungen ab,
-// ohne ewig zu blockieren.
-constexpr uint8_t MAX_RETRIES = 3;
+// Verzögerung der Hauptschleife.
+constexpr unsigned long LOOP_INTERVAL_MS = 10UL;

@@ -70,8 +70,8 @@ void debugWarn(const char* t) { if(DEBUG_LOKAL_AKTIV){Serial.print("[WARN] ");Se
 void initialisiereHardware() {
     if (PIN_STATUS_LED >= 0) { pinMode(PIN_STATUS_LED, OUTPUT); digitalWrite(PIN_STATUS_LED, LOW); }
     if (PIN_PIR >= 0) pinMode(PIN_PIR, INPUT);
-    // I2C-Bus initialisieren
-    // Wire.begin(PIN_SENSOR_SDA, PIN_SENSOR_SCL); // Platzhalter
+    // Fester Hardwarestandard: SDA = GPIO0, SCL = GPIO1.
+    // Wire.begin(PIN_SENSOR_SDA, PIN_SENSOR_SCL);
 }
 
 void initialisiereEspNow() {

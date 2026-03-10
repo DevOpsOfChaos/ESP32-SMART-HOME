@@ -1,63 +1,49 @@
 /*
 ====================================================================
  Projekt   : SmartHome ESP32
- Gerät     : Master (ESP32-C3)
+ Geraet    : Master (ESP32-C3)
  Datei     : main.cpp
- Version   : 0.2.0
+ Version   : 0.2.1
  Stand     : 2026-03-10
 
  Funktion:
- Der Master ist die ESP-NOW <-> MQTT Bridge des Systems.
- Er empfängt Pakete aller Nodes über ESP-NOW, übersetzt sie
- in MQTT-Nachrichten und leitet MQTT-Befehle/Konfigurationen
- als ESP-NOW-Pakete an die zugehörigen Nodes weiter.
+ Erste lauffaehige Vertikalstrecke fuer genau ein Pilotgeraet:
+ net_erl -> master -> MQTT -> master -> net_erl
 
- Der Master ist kein zweites Node-RED und keine
- Automationsplattform. Alle Regeln und Automationen
- gehören auf den Server.
-
- Hardware:
- - ESP32-C3 SuperMini oder DevKit
- - WLAN auf festem Kanal (lokal konfiguriert)
-
- Architekturebene: B – Bridge
- - spricht ESP-NOW mit Nodes
- - spricht MQTT mit dem Server (Raspberry Pi)
-
- Master-Aufgaben:
- 1. ESP-NOW-Empfang aller Nodes
- 2. Geräte-Registry im RAM (max. SH_MAX_DEVICES Einträge)
- 3. ACK/Retry für relevante Ausgangsnachrichten
- 4. Duplikaterkennung eingehender Pakete (Sequenznummer)
- 5. Availability-Erkennung (Online/Offline je Gerät)
- 6. Zeitverteilung (TIME-Pakete an alle Nodes)
- 7. Konfigurations-Routing (CFG-Pakete: MQTT -> Node)
- 8. Befehlsrouting (CMD-Pakete: MQTT -> Node)
- 9. MQTT-Veröffentlichung von STATE und EVENT
-
- Hinweise:
- - Secrets.h ist nicht im Repository.
- - Vorlage: firmware/include/Secrets.example.h
- - Private Zugangsdaten niemals in diese Datei.
- - Debug nur in Testständen aktiv (DEVICE_DEBUG_AKTIV in AppConfig.h).
+ Dieser Stand implementiert bewusst nur:
+ - Empfang von HELLO, HEARTBEAT und STATE_REPORT via ESP-NOW
+ - Verwaltung genau eines Nodes: net_erl_01
+ - MQTT-Publish fuer Master-Status, Node-Status und Node-State
+ - MQTT-Subscribe fuer set_relay
+ - Weiterleitung COMMAND_SET_RELAY an den Pilot-Node
+ - Offline-Timeout und klare Logs
 ====================================================================
 */
 
-// ============================================================
-// 1. Bibliotheken
-// ============================================================
-
 #include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
+#include <stdarg.h>
+#include <string.h>
+#include <ctype.h>
+
+#if __has_include(<esp_arduino_version.h>)
+  #include <esp_arduino_version.h>
+#endif
+
+#ifndef ESP_ARDUINO_VERSION_MAJOR
+  #define ESP_ARDUINO_VERSION_MAJOR 2
+#endif
+
 #include "AppConfig.h"
 #include "PinConfig.h"
 #include "../../include/ProjectVersion.h"
-#include "../../include/BuildConfig.h"
 #include "../../include/DebugConfig.h"
 #include "../../lib/ShProtocol/src/Protocol.h"
 #include "../../lib/ShProtocol/src/DeviceTypes.h"
 
-// Secrets.h ist lokal und liegt nicht im Repository.
-// Vorlage: firmware/include/Secrets.example.h
 #if __has_include("../../include/Secrets.h")
   #include "../../include/Secrets.h"
 #else
@@ -70,146 +56,432 @@
   #define MQTT_PASSWORD     "KEIN_MQTT_PASSWORT"
 #endif
 
-// ============================================================
-// 2. Versions- und Geräteinformationen
-// ============================================================
-
-constexpr char DATEI_GERAET[]  = "Master";
-constexpr char DATEI_VERSION[] = "0.2.0";
-
-// ============================================================
-// 3. Einstellungen vor dem Upload
-// ============================================================
-// Gerätespezifische Einstellungen stehen in AppConfig.h.
-// Vor dem Flashen prüfen:
-//   - DEVICE_ID  (AppConfig.h)
-//   - DEVICE_NAME (AppConfig.h)
-//   - WLAN_KANAL (AppConfig.h)
-//   - Secrets.h vorhanden und befüllt?
-
-// ============================================================
-// 4. Debug-Konfiguration
-// ============================================================
-
-// Debug aktiv, wenn sowohl globale als auch gerätespezifische
-// Freigabe gesetzt ist.
 constexpr bool DEBUG_LOKAL_AKTIV = DEVICE_DEBUG_AKTIV && DEBUG_AKTIV;
+constexpr char DATEI_GERAET[] = "MASTER";
+constexpr char DATEI_VERSION[] = "0.2.1";
+constexpr char PILOT_NODE_ID[] = "net_erl_01";
+constexpr char PILOT_DEVICE_TYPE[] = "net_erl";
+constexpr char MQTT_TOPIC_MASTER_STATUS[] = "smarthome/master/status";
+constexpr char MQTT_TOPIC_NODE_STATUS[] = "smarthome/node/net_erl_01/status";
+constexpr char MQTT_TOPIC_NODE_STATE[] = "smarthome/node/net_erl_01/state";
+constexpr char MQTT_TOPIC_NODE_COMMAND[] = "smarthome/node/net_erl_01/command";
 
-// ============================================================
-// 5. Konstanten, Zeitwerte und Grenzwerte
-// ============================================================
-
-// Hauptloop-Takt in Millisekunden.
-// Begründung: 10 ms erlaubt flüssige ACK-Timeout-Prüfung
-// ohne spürbare CPU-Last.
-constexpr unsigned long LOOP_INTERVAL_MS = 10UL;
-
-// Zeitabstand zwischen TIME-Verteilungen an alle Nodes (ms).
-// Begründung: Minütliche Synchronisation reicht für lokale
-// Node-Zeitstempel. Zu häufig belastet die Funkstrecke.
-constexpr unsigned long TIME_SYNC_INTERVAL_MS = 60000UL;
-
-// Takt für den Availability-Check (ms).
-// Begründung: Bei 30-s-STATE-Intervall der Nodes reagiert
-// ein 10-s-Check spätestens nach 3 ausgebliebenen Meldungen.
-constexpr unsigned long AVAILABILITY_CHECK_MS = 10000UL;
-
-// Offline-Timeout für Netzgeräte (ms).
-// Begründung: 3 × 30-s-Meldeintervall = 90 s.
-constexpr unsigned long OFFLINE_TIMEOUT_NET_MS = 90000UL;
-
-// Offline-Timeout für Batteriegeräte (ms).
-// Begründung: Batteriegeräte melden seltener. 10 Minuten
-// verhindern unnötige Offline-Flicker.
-constexpr unsigned long OFFLINE_TIMEOUT_BAT_MS = 600000UL;
-
-// ============================================================
-// 6. Pinbelegung
-// ============================================================
-// Alle Pins in PinConfig.h.
-
-// ============================================================
-// 7. Datenstrukturen und Statusvariablen
-// ============================================================
-
-// Eintrag in der RAM-Geräte-Registry des Masters.
-struct RegistryEntry {
-    char     device_id[SH_DEVICE_ID_LEN];
-    char     device_name[SH_DEVICE_NAME_LEN];
-    uint8_t  device_class;
-    uint16_t caps;
-    uint8_t  power_type;
-    uint8_t  peer_mac[6];
-    bool     ist_online;
+struct PilotNodeState {
+    bool mac_bekannt;
+    bool online;
+    bool state_bekannt;
+    bool relay_1;
+    bool fault;
     unsigned long letzter_kontakt_ms;
-    uint8_t  letzter_seq;   // für Duplikaterkennung
-    uint16_t fw_version;
-    uint32_t boot_counter;
+    uint8_t mac[6];
 };
 
 struct MasterState {
-    bool     wlan_verbunden;
-    bool     mqtt_verbunden;
-    bool     espnow_bereit;
-    unsigned long letzter_time_sync_ms;
-    unsigned long letzter_availability_check_ms;
-    unsigned long letzteSchleifeMs;
-    uint8_t  seq_zaehler;
+    bool wlan_verbunden;
+    bool mqtt_verbunden;
+    bool espnow_bereit;
+    unsigned long letzter_wlan_versuch_ms;
+    unsigned long letzter_mqtt_versuch_ms;
+    uint8_t naechste_seq;
 };
 
-RegistryEntry registry[SH_MAX_DEVICES];
-uint8_t       registry_anzahl = 0;
-MasterState   masterStatus = {};
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+PilotNodeState pilotNode = {};
+MasterState masterStatus = {};
 
-// ============================================================
-// 8. Funktionsprototypen
-// ============================================================
+void logf(const char* level, const char* format, ...) {
+    if (!DEBUG_LOKAL_AKTIV) return;
 
-void initialisiereHardware();
-void initialisiereWlan();
-void initialisiereMqtt();
-void initialisiereEspNow();
-void aktualisiereKommunikation();
-void aktualisiereAvailability();
-void aktualisiereZeitverteilung();
-void verarbeiteEingehendesEspNowPaket(const uint8_t* mac, const uint8_t* daten, int laenge);
-void verarbeiteHello(const uint8_t* mac, const SmartHome::HelloPayload& payload);
-void sendeHelloAck(const uint8_t* peer_mac, uint8_t seq);
-void veroeffentlicheState(const char* device_id, const uint8_t* payload, uint16_t laenge);
-void veroeffentlicheEvent(const char* device_id, const uint8_t* payload, uint16_t laenge);
-void veroeffentlicheAvailability(const char* device_id, bool online);
-void veroeffentlicheMeta(const RegistryEntry& entry);
-int  findeRegistryEintrag(const uint8_t* mac);
-int  erstelleRegistryEintrag(const uint8_t* mac, const SmartHome::HelloPayload& payload);
-void gibStartmeldungAus();
-void debugInfo(const char* text);
-void debugWarn(const char* text);
-void debugError(const char* text);
+    char message[192];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
 
-// ============================================================
-// 9. Hilfsfunktionen
-// ============================================================
-
-void debugInfo(const char* text) {
-    if (DEBUG_LOKAL_AKTIV) { Serial.print("[INFO] "); Serial.println(text); }
-}
-void debugWarn(const char* text) {
-    if (DEBUG_LOKAL_AKTIV) { Serial.print("[WARN] "); Serial.println(text); }
-}
-void debugError(const char* text) {
-    if (DEBUG_LOKAL_AKTIV) { Serial.print("[ERR ] "); Serial.println(text); }
+    Serial.print("[");
+    Serial.print(level);
+    Serial.print("] ");
+    Serial.println(message);
 }
 
-int findeRegistryEintrag(const uint8_t* mac) {
-    for (uint8_t i = 0; i < registry_anzahl; i++) {
-        if (memcmp(registry[i].peer_mac, mac, 6) == 0) return (int)i;
+void copyText(char* target, size_t targetSize, const char* source) {
+    if (!target || targetSize == 0) return;
+    if (!source) {
+        target[0] = '\0';
+        return;
     }
-    return -1;
+
+    strncpy(target, source, targetSize - 1U);
+    target[targetSize - 1U] = '\0';
 }
 
-// ============================================================
-// 10. Hardware- und Initialisierungsfunktionen
-// ============================================================
+void macText(const uint8_t* mac, char* buffer, size_t bufferSize) {
+    if (!buffer || bufferSize == 0) return;
+    if (!mac) {
+        copyText(buffer, bufferSize, "unbekannt");
+        return;
+    }
+
+    char local[18] = {0};
+    SmartHome::macToString(mac, local);
+    copyText(buffer, bufferSize, local);
+}
+
+bool gleicheNodeId(const char* nodeId) {
+    return nodeId != nullptr && strncmp(nodeId, PILOT_NODE_ID, SH_DEVICE_ID_LEN) == 0;
+}
+
+bool stellePeerSicher(const uint8_t* mac) {
+    if (mac == nullptr || !SmartHome::isValidMac(mac)) return false;
+    if (esp_now_is_peer_exist(mac)) return true;
+
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, mac, 6);
+    peerInfo.channel = (uint8_t)WLAN_KANAL;
+    peerInfo.encrypt = false;
+
+    esp_err_t err = esp_now_add_peer(&peerInfo);
+    if (err != ESP_OK) {
+        logf("WARN", "Peer konnte nicht angelegt werden (err=%d)", (int)err);
+        return false;
+    }
+
+    char text[18] = {0};
+    macText(mac, text, sizeof(text));
+    logf("INFO", "Peer aktiv: %s", text);
+    return true;
+}
+
+void baueNodeStatusJson(char* buffer, size_t bufferSize, bool online) {
+    snprintf(
+        buffer,
+        bufferSize,
+        "{\"node_id\":\"%s\",\"online\":%s,\"device_type\":\"%s\",\"fw\":\"%s\"}",
+        PILOT_NODE_ID,
+        online ? "true" : "false",
+        PILOT_DEVICE_TYPE,
+        PROJECT_VERSION);
+}
+
+void baueNodeStateJson(char* buffer, size_t bufferSize) {
+    snprintf(
+        buffer,
+        bufferSize,
+        "{\"node_id\":\"%s\",\"relay_1\":%s,\"fault\":%s}",
+        PILOT_NODE_ID,
+        pilotNode.relay_1 ? "true" : "false",
+        pilotNode.fault ? "true" : "false");
+}
+
+void baueMasterStatusJson(char* buffer, size_t bufferSize, bool online) {
+    snprintf(
+        buffer,
+        bufferSize,
+        "{\"online\":%s,\"wifi\":%s,\"mqtt\":%s,\"espnow\":%s,\"fw\":\"%s\"}",
+        online ? "true" : "false",
+        masterStatus.wlan_verbunden ? "true" : "false",
+        masterStatus.mqtt_verbunden ? "true" : "false",
+        masterStatus.espnow_bereit ? "true" : "false",
+        PROJECT_VERSION);
+}
+
+void publishRetained(const char* topic, const char* payload) {
+    if (!masterStatus.mqtt_verbunden) return;
+
+    if (!mqttClient.publish(topic, payload, true)) {
+        logf("WARN", "MQTT publish fehlgeschlagen: %s", topic);
+        return;
+    }
+
+    logf("INFO", "MQTT publish %s -> %s", topic, payload);
+}
+
+void publishMasterStatus() {
+    char payload[160] = {0};
+    baueMasterStatusJson(payload, sizeof(payload), true);
+    publishRetained(MQTT_TOPIC_MASTER_STATUS, payload);
+}
+
+void publishNodeStatus(bool online) {
+    char payload[160] = {0};
+    baueNodeStatusJson(payload, sizeof(payload), online);
+    publishRetained(MQTT_TOPIC_NODE_STATUS, payload);
+}
+
+void publishNodeState() {
+    if (!pilotNode.state_bekannt) return;
+
+    char payload[128] = {0};
+    baueNodeStateJson(payload, sizeof(payload));
+    publishRetained(MQTT_TOPIC_NODE_STATE, payload);
+}
+
+void aktualisierePilotNode(const uint8_t* mac) {
+    pilotNode.letzter_kontakt_ms = millis();
+
+    if (mac != nullptr) {
+        bool neueMac = !pilotNode.mac_bekannt || memcmp(pilotNode.mac, mac, 6) != 0;
+        memcpy(pilotNode.mac, mac, 6);
+        pilotNode.mac_bekannt = true;
+        stellePeerSicher(pilotNode.mac);
+
+        if (neueMac) {
+            char text[18] = {0};
+            macText(mac, text, sizeof(text));
+            logf("INFO", "Pilot-Node MAC aktualisiert: %s", text);
+        }
+    }
+
+    if (!pilotNode.online) {
+        pilotNode.online = true;
+        publishNodeStatus(true);
+        logf("INFO", "Node %s ist online", PILOT_NODE_ID);
+    }
+}
+
+bool sendePaket(const uint8_t* zielMac, uint8_t msgType, const void* payload, size_t payloadLen, const char* label) {
+    if (zielMac == nullptr || payloadLen > SH_MAX_PAYLOAD_BYTES) return false;
+    if (!stellePeerSicher(zielMac)) return false;
+
+    uint8_t buffer[SH_ESPNOW_MAX_BYTES] = {0};
+    SmartHome::MsgHeader header = {};
+    SmartHome::fillHeader(header, msgType, masterStatus.naechste_seq++, 0, (uint16_t)payloadLen);
+
+    uint8_t* payloadBuffer = buffer + SH_HEADER_SIZE;
+    if (payloadLen > 0 && payload != nullptr) {
+        memcpy(payloadBuffer, payload, payloadLen);
+    }
+
+    SmartHome::finalizePacketCrc(header, payloadBuffer);
+    memcpy(buffer, &header, sizeof(header));
+
+    esp_err_t err = esp_now_send(zielMac, buffer, SH_HEADER_SIZE + payloadLen);
+    if (err != ESP_OK) {
+        logf("WARN", "%s konnte nicht gesendet werden (err=%d)", label, (int)err);
+        return false;
+    }
+
+    char text[18] = {0};
+    macText(zielMac, text, sizeof(text));
+    logf("INFO", "%s gesendet an %s", label, text);
+    return true;
+}
+
+void sendeHelloAck(const uint8_t* zielMac) {
+    SmartHome::HelloAckPayload payload = {};
+    payload.channel = (uint8_t)(masterStatus.wlan_verbunden ? WiFi.channel() : WLAN_KANAL);
+    payload.ack_status = SH_ACK_OK;
+    sendePaket(zielMac, SH_MSG_HELLO_ACK, &payload, sizeof(payload), "HELLO_ACK");
+}
+
+bool skipWhitespace(const char*& cursor) {
+    if (cursor == nullptr) return false;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor)) {
+        cursor++;
+    }
+    return *cursor != '\0';
+}
+
+bool jsonHoleString(const char* json, const char* key, char* ziel, size_t zielGroesse) {
+    if (!json || !key || !ziel || zielGroesse == 0) return false;
+
+    char muster[48] = {0};
+    snprintf(muster, sizeof(muster), "\"%s\"", key);
+    const char* fund = strstr(json, muster);
+    if (!fund) return false;
+
+    const char* cursor = strchr(fund + strlen(muster), ':');
+    if (!cursor) return false;
+    cursor++;
+    if (!skipWhitespace(cursor) || *cursor != '"') return false;
+    cursor++;
+
+    const char* ende = strchr(cursor, '"');
+    if (!ende) return false;
+
+    size_t len = (size_t)(ende - cursor);
+    if (len >= zielGroesse) len = zielGroesse - 1U;
+    memcpy(ziel, cursor, len);
+    ziel[len] = '\0';
+    return true;
+}
+
+bool jsonHoleBool(const char* json, const char* key, bool* wert) {
+    if (!json || !key || !wert) return false;
+
+    char muster[48] = {0};
+    snprintf(muster, sizeof(muster), "\"%s\"", key);
+    const char* fund = strstr(json, muster);
+    if (!fund) return false;
+
+    const char* cursor = strchr(fund + strlen(muster), ':');
+    if (!cursor) return false;
+    cursor++;
+    if (!skipWhitespace(cursor)) return false;
+
+    if (strncmp(cursor, "true", 4) == 0) {
+        *wert = true;
+        return true;
+    }
+    if (strncmp(cursor, "false", 5) == 0) {
+        *wert = false;
+        return true;
+    }
+    return false;
+}
+
+void verarbeiteHello(const uint8_t* senderMac, const SmartHome::HelloPayload& payload) {
+    if (!gleicheNodeId(payload.device_id)) {
+        logf("WARN", "HELLO ignoriert: unerwartete node_id=%s", payload.device_id);
+        return;
+    }
+
+    aktualisierePilotNode(senderMac);
+    logf("INFO", "HELLO von %s (%s)", payload.device_id, payload.device_name);
+    publishNodeStatus(true);
+    sendeHelloAck(senderMac);
+}
+
+void verarbeiteHeartbeat(const uint8_t* senderMac, const SmartHome::HeartbeatPayload& payload) {
+    if (!gleicheNodeId(payload.node_id)) {
+        logf("WARN", "HEARTBEAT ignoriert: unerwartete node_id=%s", payload.node_id);
+        return;
+    }
+
+    aktualisierePilotNode(senderMac);
+    logf("INFO", "HEARTBEAT von %s (uptime=%lus)", payload.node_id, (unsigned long)payload.uptime_s);
+}
+
+void verarbeiteStateReport(const uint8_t* senderMac, const SmartHome::StateReportPayload& payload) {
+    if (!gleicheNodeId(payload.node_id)) {
+        logf("WARN", "STATE_REPORT ignoriert: unerwartete node_id=%s", payload.node_id);
+        return;
+    }
+
+    aktualisierePilotNode(senderMac);
+    pilotNode.relay_1 = (payload.relay_1 != 0U);
+    pilotNode.fault = (payload.fault != 0U);
+    pilotNode.state_bekannt = true;
+
+    logf(
+        "INFO",
+        "STATE_REPORT von %s: relay_1=%s fault=%s",
+        payload.node_id,
+        pilotNode.relay_1 ? "true" : "false",
+        pilotNode.fault ? "true" : "false");
+
+    publishNodeState();
+}
+
+void verarbeiteEspNowPaket(const uint8_t* senderMac, const uint8_t* daten, int laenge) {
+    if (!senderMac || !daten || laenge < (int)sizeof(SmartHome::MsgHeader)) {
+        logf("WARN", "ESP-NOW Paket verworfen: ungueltige Eingabe");
+        return;
+    }
+
+    if (!SmartHome::hasValidPacketCrc(daten, (size_t)laenge)) {
+        logf("WARN", "ESP-NOW Paket verworfen: CRC/Header ungueltig");
+        return;
+    }
+
+    const SmartHome::MsgHeader* header = reinterpret_cast<const SmartHome::MsgHeader*>(daten);
+    const uint8_t* payload = daten + SH_HEADER_SIZE;
+
+    switch (header->msg_type) {
+        case SH_MSG_HELLO:
+            if (header->payload_len == sizeof(SmartHome::HelloPayload)) {
+                verarbeiteHello(senderMac, *reinterpret_cast<const SmartHome::HelloPayload*>(payload));
+            }
+            break;
+
+        case SH_MSG_HEARTBEAT:
+            if (header->payload_len == sizeof(SmartHome::HeartbeatPayload)) {
+                verarbeiteHeartbeat(senderMac, *reinterpret_cast<const SmartHome::HeartbeatPayload*>(payload));
+            }
+            break;
+
+        case SH_MSG_STATE:
+            if (header->payload_len == sizeof(SmartHome::StateReportPayload)) {
+                verarbeiteStateReport(senderMac, *reinterpret_cast<const SmartHome::StateReportPayload*>(payload));
+            }
+            break;
+
+        default:
+            logf("WARN", "ESP-NOW Nachricht ignoriert (msg_type=%u)", header->msg_type);
+            break;
+    }
+}
+
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+void onEspNowReceive(const esp_now_recv_info_t* info, const uint8_t* daten, int laenge) {
+    if (info == nullptr) return;
+    verarbeiteEspNowPaket(info->src_addr, daten, laenge);
+}
+#else
+void onEspNowReceive(const uint8_t* senderMac, const uint8_t* daten, int laenge) {
+    verarbeiteEspNowPaket(senderMac, daten, laenge);
+}
+#endif
+
+void onEspNowSent(const uint8_t* mac, esp_now_send_status_t status) {
+    char text[18] = {0};
+    macText(mac, text, sizeof(text));
+    logf(
+        status == ESP_NOW_SEND_SUCCESS ? "INFO" : "WARN",
+        "ESP-NOW Sendestatus an %s: %s",
+        text,
+        status == ESP_NOW_SEND_SUCCESS ? "OK" : "FEHLER");
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    char json[256] = {0};
+    size_t copyLen = length;
+    if (copyLen >= sizeof(json)) copyLen = sizeof(json) - 1U;
+    memcpy(json, payload, copyLen);
+    json[copyLen] = '\0';
+
+    logf("INFO", "MQTT empfangen %s -> %s", topic, json);
+
+    if (strcmp(topic, MQTT_TOPIC_NODE_COMMAND) != 0) {
+        logf("WARN", "MQTT Topic ignoriert: %s", topic);
+        return;
+    }
+
+    char cmd[32] = {0};
+    char requestId[48] = {0};
+    bool relayState = false;
+
+    if (!jsonHoleString(json, "cmd", cmd, sizeof(cmd)) || strcmp(cmd, "set_relay") != 0) {
+        logf("WARN", "MQTT Command ignoriert: cmd fehlt oder ist nicht set_relay");
+        return;
+    }
+
+    if (!jsonHoleBool(json, "relay_1", &relayState)) {
+        logf("WARN", "MQTT Command ignoriert: relay_1 fehlt");
+        return;
+    }
+
+    jsonHoleString(json, "request_id", requestId, sizeof(requestId));
+
+    if (!pilotNode.mac_bekannt) {
+        logf("WARN", "COMMAND_SET_RELAY verworfen: Node-MAC unbekannt");
+        return;
+    }
+
+    SmartHome::CmdPayload cmdPayload = {};
+    cmdPayload.cmd_type = SH_CMD_SET_RELAY;
+    cmdPayload.param1 = 0U;
+    cmdPayload.param2 = relayState ? 1U : 0U;
+
+    logf(
+        "INFO",
+        "MQTT -> COMMAND_SET_RELAY relay_1=%s request_id=%s",
+        relayState ? "true" : "false",
+        requestId[0] != '\0' ? requestId : "-");
+
+    sendePaket(pilotNode.mac, SH_MSG_CMD, &cmdPayload, sizeof(cmdPayload), "COMMAND_SET_RELAY");
+}
 
 void initialisiereHardware() {
     if (PIN_STATUS_LED >= 0) {
@@ -218,247 +490,159 @@ void initialisiereHardware() {
     }
 }
 
-/**
- * WLAN-Verbindung aufbauen auf festem Kanal.
- * Platzhalter: WiFi.begin() mit festem Kanal folgt in Phase 2.
- */
 void initialisiereWlan() {
-    debugInfo("WLAN: Initialisierung (Platzhalter)");
-    masterStatus.wlan_verbunden = false;
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    masterStatus.letzter_wlan_versuch_ms = millis();
+    logf("INFO", "WLAN-Verbindung gestartet: SSID=%s", WIFI_SSID);
 }
 
-/**
- * MQTT-Verbindung aufbauen.
- * Abonnierte Topics: smarthome/+/cmd  und  smarthome/+/cfg
- * Platzhalter: folgt in Phase 3.
- */
-void initialisiereMqtt() {
-    debugInfo("MQTT: Initialisierung (Platzhalter)");
-    masterStatus.mqtt_verbunden = false;
+void pruefeWlanVerbindung() {
+    bool verbunden = (WiFi.status() == WL_CONNECTED);
+    if (verbunden != masterStatus.wlan_verbunden) {
+        masterStatus.wlan_verbunden = verbunden;
+        if (verbunden) {
+            logf("INFO", "WLAN verbunden: IP=%s Kanal=%d", WiFi.localIP().toString().c_str(), WiFi.channel());
+        } else {
+            logf("WARN", "WLAN getrennt");
+        }
+    }
+
+    if (!verbunden && (millis() - masterStatus.letzter_wlan_versuch_ms) >= WIFI_RECONNECT_INTERVAL_MS) {
+        WiFi.disconnect();
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        masterStatus.letzter_wlan_versuch_ms = millis();
+        logf("INFO", "WLAN-Reconnect gestartet");
+    }
 }
 
-/**
- * ESP-NOW initialisieren und RX-Callback registrieren.
- * Platzhalter: esp_now_init() folgt in Phase 2.
- */
 void initialisiereEspNow() {
-    debugInfo("ESP-NOW: Initialisierung (Platzhalter)");
-    masterStatus.espnow_bereit = false;
+    if (!masterStatus.wlan_verbunden) {
+        esp_wifi_set_channel((uint8_t)WLAN_KANAL, WIFI_SECOND_CHAN_NONE);
+    }
+
+    if (esp_now_init() != ESP_OK) {
+        masterStatus.espnow_bereit = false;
+        logf("WARN", "ESP-NOW Initialisierung fehlgeschlagen");
+        return;
+    }
+
+    esp_now_register_send_cb(onEspNowSent);
+    esp_now_register_recv_cb(onEspNowReceive);
+    masterStatus.espnow_bereit = true;
+    logf("INFO", "ESP-NOW bereit");
 }
 
-// ============================================================
-// 11. Kommunikationsfunktionen
-// ============================================================
-
-/**
- * ESP-NOW-Empfangs-Callback.
- * Prüft Header, erkennt Duplikate, dispatcht nach msg_type.
- *
- * Parameter:
- *   mac    - Sender-MAC (6 Bytes)
- *   daten  - Rohdaten
- *   laenge - Paketlänge
- */
-void verarbeiteEingehendesEspNowPaket(
-    const uint8_t* mac,
-    const uint8_t* daten,
-    int laenge)
-{
-    if (laenge < (int)SH_HEADER_SIZE) {
-        debugWarn("ESP-NOW: Paket zu kurz");
-        return;
-    }
-
-    const SmartHome::MsgHeader* header =
-        reinterpret_cast<const SmartHome::MsgHeader*>(daten);
-
-    if (!SmartHome::isValidHeader(*header)) {
-        debugWarn("ESP-NOW: Ungueltiger Header");
-        return;
-    }
-
-    const uint8_t* payload = daten + SH_HEADER_SIZE;
-
-    switch (header->msg_type) {
-        case SH_MSG_HELLO: {
-            if (header->payload_len == sizeof(SmartHome::HelloPayload)) {
-                verarbeiteHello(mac,
-                    *reinterpret_cast<const SmartHome::HelloPayload*>(payload));
-            }
-            break;
-        }
-        case SH_MSG_STATE: {
-            int idx = findeRegistryEintrag(mac);
-            if (idx >= 0) {
-                registry[idx].letzter_kontakt_ms = millis();
-                if (!registry[idx].ist_online) {
-                    registry[idx].ist_online = true;
-                    veroeffentlicheAvailability(registry[idx].device_id, true);
-                }
-                veroeffentlicheState(
-                    registry[idx].device_id, payload, header->payload_len);
-            }
-            break;
-        }
-        case SH_MSG_EVENT: {
-            int idx = findeRegistryEintrag(mac);
-            if (idx >= 0) {
-                registry[idx].letzter_kontakt_ms = millis();
-                veroeffentlicheEvent(
-                    registry[idx].device_id, payload, header->payload_len);
-            }
-            break;
-        }
-        case SH_MSG_ACK:
-            debugInfo("ACK empfangen");
-            break;
-        default:
-            debugWarn("ESP-NOW: Unbekannter msg_type");
-            break;
-    }
+void initialisiereMqtt() {
+    mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+    mqttClient.setCallback(mqttCallback);
+    mqttClient.setBufferSize(256);
+    logf("INFO", "MQTT konfiguriert: %s:%d", MQTT_HOST, MQTT_PORT);
 }
 
-void verarbeiteHello(const uint8_t* mac, const SmartHome::HelloPayload& payload) {
-    if (!SmartHome::isValidDeviceId(payload.device_id)) {
-        debugWarn("HELLO: Ungueltiger device_id");
+void pruefeMqttVerbindung() {
+    if (!masterStatus.wlan_verbunden) {
+        if (masterStatus.mqtt_verbunden) {
+            mqttClient.disconnect();
+            masterStatus.mqtt_verbunden = false;
+        }
         return;
     }
-    int idx = findeRegistryEintrag(mac);
-    if (idx < 0) {
-        idx = erstelleRegistryEintrag(mac, payload);
-        if (idx < 0) { debugError("HELLO: Registry voll"); return; }
-        debugInfo("HELLO: Neues Geraet registriert");
+
+    if (mqttClient.connected()) {
+        mqttClient.loop();
+        if (!masterStatus.mqtt_verbunden) {
+            masterStatus.mqtt_verbunden = true;
+        }
+        return;
+    }
+
+    masterStatus.mqtt_verbunden = false;
+    if ((millis() - masterStatus.letzter_mqtt_versuch_ms) < MQTT_RECONNECT_INTERVAL_MS) {
+        return;
+    }
+
+    masterStatus.letzter_mqtt_versuch_ms = millis();
+
+    char willPayload[160] = {0};
+    baueMasterStatusJson(willPayload, sizeof(willPayload), false);
+
+    bool verbunden = mqttClient.connect(
+        DEVICE_ID,
+        MQTT_USER,
+        MQTT_PASSWORD,
+        MQTT_TOPIC_MASTER_STATUS,
+        0,
+        true,
+        willPayload,
+        true);
+
+    if (!verbunden) {
+        logf("WARN", "MQTT connect fehlgeschlagen (state=%d)", mqttClient.state());
+        return;
+    }
+
+    masterStatus.mqtt_verbunden = true;
+    logf("INFO", "MQTT verbunden");
+
+    if (!mqttClient.subscribe(MQTT_TOPIC_NODE_COMMAND)) {
+        logf("WARN", "MQTT Subscribe fehlgeschlagen: %s", MQTT_TOPIC_NODE_COMMAND);
     } else {
-        memcpy(registry[idx].device_name, payload.device_name, SH_DEVICE_NAME_LEN);
-        registry[idx].fw_version   = payload.fw_version;
-        registry[idx].boot_counter = payload.boot_counter;
+        logf("INFO", "MQTT Subscribe aktiv: %s", MQTT_TOPIC_NODE_COMMAND);
     }
-    registry[idx].letzter_kontakt_ms = millis();
-    registry[idx].ist_online = true;
-    veroeffentlicheMeta(registry[idx]);
-    veroeffentlicheAvailability(registry[idx].device_id, true);
-    sendeHelloAck(mac, 0);
+
+    publishMasterStatus();
+    publishNodeStatus(pilotNode.online);
+    publishNodeState();
 }
 
-int erstelleRegistryEintrag(
-    const uint8_t* mac,
-    const SmartHome::HelloPayload& payload)
-{
-    if (registry_anzahl >= SH_MAX_DEVICES) return -1;
-    int idx = (int)registry_anzahl++;
-    memset(&registry[idx], 0, sizeof(RegistryEntry));
-    memcpy(registry[idx].peer_mac, mac, 6);
-    SmartHome::safeCopyDeviceId(payload.device_id, registry[idx].device_id);
-    memcpy(registry[idx].device_name, payload.device_name, SH_DEVICE_NAME_LEN);
-    registry[idx].device_name[SH_DEVICE_NAME_LEN - 1] = '\0';
-    registry[idx].device_class = payload.device_class;
-    registry[idx].caps = ((uint16_t)payload.caps_hi << 8) | payload.caps_lo;
-    registry[idx].power_type   = payload.power_type;
-    registry[idx].fw_version   = payload.fw_version;
-    registry[idx].boot_counter = payload.boot_counter;
-    registry[idx].letzter_seq  = 0xFF;
-    return idx;
-}
+void pruefeOfflineTimeout() {
+    if (!pilotNode.online) return;
 
-void sendeHelloAck(const uint8_t* peer_mac, uint8_t seq) {
-    (void)peer_mac; (void)seq;
-    debugInfo("HELLO_ACK: gesendet (Platzhalter)");
-}
-
-void veroeffentlicheState(const char* d, const uint8_t* p, uint16_t l) {
-    (void)d; (void)p; (void)l;
-    debugInfo("MQTT STATE: (Platzhalter)");
-}
-void veroeffentlicheEvent(const char* d, const uint8_t* p, uint16_t l) {
-    (void)d; (void)p; (void)l;
-    debugInfo("MQTT EVENT: (Platzhalter)");
-}
-void veroeffentlicheAvailability(const char* d, bool online) {
-    (void)d;
-    debugInfo(online ? "MQTT: online" : "MQTT: offline");
-}
-void veroeffentlicheMeta(const RegistryEntry& e) {
-    (void)e;
-    debugInfo("MQTT META: (Platzhalter)");
-}
-
-// ============================================================
-// 12. Logikfunktionen
-// ============================================================
-
-/**
- * Prüft Registry auf Timeout und markiert inaktive Geräte offline.
- */
-void aktualisiereAvailability() {
-    unsigned long jetzt = millis();
-    for (uint8_t i = 0; i < registry_anzahl; i++) {
-        if (!registry[i].ist_online) continue;
-        unsigned long timeout_ms = (registry[i].power_type == SH_POWER_BATTERY)
-            ? OFFLINE_TIMEOUT_BAT_MS : OFFLINE_TIMEOUT_NET_MS;
-        if ((jetzt - registry[i].letzter_kontakt_ms) > timeout_ms) {
-            registry[i].ist_online = false;
-            veroeffentlicheAvailability(registry[i].device_id, false);
-        }
+    if ((millis() - pilotNode.letzter_kontakt_ms) > NODE_OFFLINE_TIMEOUT_MS) {
+        pilotNode.online = false;
+        publishNodeStatus(false);
+        logf("WARN", "Node %s nach Timeout offline", PILOT_NODE_ID);
     }
 }
-
-/**
- * Sendet TIME-Pakete an alle Nodes bei Ablauf des Intervalls.
- * Platzhalter: NTP-Zeitquelle folgt in Phase 3.
- */
-void aktualisiereZeitverteilung() {
-    unsigned long jetzt = millis();
-    if ((jetzt - masterStatus.letzter_time_sync_ms) < TIME_SYNC_INTERVAL_MS) return;
-    masterStatus.letzter_time_sync_ms = jetzt;
-    debugInfo("TIME: Zeitverteilung (Platzhalter)");
-}
-
-void aktualisiereKommunikation() {
-    // Platzhalter: MQTT-Loop, ESP-NOW-Statusprüfung
-}
-
-// ============================================================
-// 13. Debugfunktionen
-// ============================================================
 
 void gibStartmeldungAus() {
     if (!DEBUG_LOKAL_AKTIV) return;
+
     Serial.println("================================");
     Serial.println(PROJECT_NAME);
-    Serial.print(DATEI_GERAET); Serial.print(" v"); Serial.println(DATEI_VERSION);
-    Serial.print("Registry-Slots: "); Serial.println(SH_MAX_DEVICES);
-    Serial.println("Neubasis-Geruest v0.2.0");
+    Serial.print(DATEI_GERAET);
+    Serial.print(" v");
+    Serial.println(DATEI_VERSION);
+    Serial.print("Pilot-Node: ");
+    Serial.println(PILOT_NODE_ID);
+    Serial.print("FW: ");
+    Serial.println(PROJECT_VERSION);
+    Serial.println("Minimalstrecke: ESP-NOW <-> MQTT <-> ESP-NOW");
     Serial.println("================================");
 }
 
-// ============================================================
-// 14. setup()
-// ============================================================
-
 void setup() {
-    if (DEBUG_LOKAL_AKTIV) { Serial.begin(115200); delay(150); }
-    gibStartmeldungAus();
-    memset(registry, 0, sizeof(registry));
-    registry_anzahl = 0;
+    if (DEBUG_LOKAL_AKTIV) {
+        Serial.begin(115200);
+        delay(150);
+    }
+
+    pilotNode = {};
     masterStatus = {};
+    gibStartmeldungAus();
     initialisiereHardware();
     initialisiereWlan();
+    delay(500);
+    pruefeWlanVerbindung();
     initialisiereEspNow();
     initialisiereMqtt();
 }
 
-// ============================================================
-// 15. loop()
-// ============================================================
-
 void loop() {
-    unsigned long jetzt = millis();
-    aktualisiereKommunikation();
-    if ((jetzt - masterStatus.letzter_availability_check_ms) >= AVAILABILITY_CHECK_MS) {
-        masterStatus.letzter_availability_check_ms = jetzt;
-        aktualisiereAvailability();
-    }
-    aktualisiereZeitverteilung();
-    masterStatus.letzteSchleifeMs = jetzt;
+    pruefeWlanVerbindung();
+    pruefeMqttVerbindung();
+    pruefeOfflineTimeout();
     delay(LOOP_INTERVAL_MS);
 }

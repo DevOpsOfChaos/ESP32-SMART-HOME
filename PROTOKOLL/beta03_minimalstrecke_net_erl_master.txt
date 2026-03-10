@@ -1,0 +1,60 @@
+Stand: beta03
+Datei: beta03_minimalstrecke_net_erl_master.txt
+Datum: 2026-03-10
+Autor: Codex
+
+1. Ziel
+- Erste echte Vertikalstrecke des Systems nachweisen:
+  `net_erl_01 -> master -> MQTT -> master -> net_erl_01`
+- Nicht das System aufblasen, sondern belegen, dass die Architektur
+  technisch funktioniert.
+
+2. Aenderungen
+- `net_erl` sendet jetzt HELLO beim Start, HEARTBEAT zyklisch und
+  STATE_REPORT beim Start sowie nach Relaisaenderungen.
+- `net_erl` nimmt `COMMAND_SET_RELAY` vom Master an und haelt den
+  Relaiszustand lokal.
+- `master` empfängt HELLO, HEARTBEAT und STATE_REPORT per ESP-NOW
+  fuer genau einen Pilot-Node: `net_erl_01`.
+- `master` publiziert:
+  `smarthome/master/status`
+  `smarthome/node/net_erl_01/status`
+  `smarthome/node/net_erl_01/state`
+- `master` abonniert `smarthome/node/net_erl_01/command`, parst
+  JSON `set_relay` und leitet den Befehl per ESP-NOW weiter.
+- Offline-Timeout fuer den Pilot-Node ist implementiert.
+- Build-Filter in `platformio.ini` wurden korrigiert, weil die alte
+  Reihenfolge effektiv alles aus dem Build ausgeschlossen hat.
+
+3. Nutzen
+- Erstes Ende-zu-Ende-Skelett laeuft wirklich statt nur kommentiert
+  zu sein.
+- Der Nachweis betrifft die richtige Architekturgrenze:
+  Node nur ESP-NOW, Master als Bridge, MQTT nur am Master.
+- Der Stand ist klein genug, um auf echter Hardware nachvollziehbar
+  getestet zu werden.
+
+4. Offene Punkte
+- Keine Mehrgeraete-Unterstuetzung.
+- Keine ACK-/Retry-Mechanik fuer Commands.
+- Keine Hardwaretests in dieser Session, nur Build-Nachweis.
+- Ohne lokale `Secrets.h` kommt der Master nicht wirklich an WLAN/MQTT.
+- Die geplante breite Protokoll-/Registry-Logik bleibt weiter offen.
+
+5. Teststatus
+- Erfolgreich gebaut:
+  `platformio run -e master`
+  `platformio run -e net_erl`
+- Nicht durchgefuehrt in dieser Session:
+  Flash auf Hardware, realer MQTT-Broker-Test, realer Offline-Nachweis.
+- Warnung beim Master-Build:
+  `Secrets.h` fehlt lokal im Build-Kontext, deshalb nur Fallback-Werte.
+
+6. Lehrerblick
+- Eigenleistung steckt hier nicht in Blender-Komplexitaet, sondern in
+  der Reduktion auf eine pruefbare Strecke mit echter Laufzeitlogik.
+- Die vorherige Basis war groesstenteils Kommentar und Platzhalter;
+  dieser Stand ersetzt sie durch lauffaehige ESP-NOW-/MQTT-Pfade.
+- Als Referenz genutzt wurden nur vorhandene Projektkonstanten,
+  Board-/Repo-Struktur und die Protokollbasis. Die eigentliche
+  Laufzeitstrecke wurde in diesem Stand konkret implementiert.

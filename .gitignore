@@ -37,13 +37,11 @@ credentials*.h
 
 # Oeffentliche Beispiel-Dateien muessen versionierbar bleiben
 !firmware/include/Secrets.example.h
-!server/config/.env.example
+!server/.env.example
 
 # Server Secrets und Laufzeitdaten
-server/config/.env
 server/config/*.local.*
-server/config/mosquitto/mosquitto.conf
-server/config/mosquitto/passwd
+server/config/mosquitto/config/
 server/data/
 server/runtime/
 server/node_modules/
