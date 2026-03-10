@@ -1,0 +1,54 @@
+# Build-Artefakte (PlatformIO / allgemein)
+.pio/
+build/
+dist/
+*.bin
+*.elf
+*.map
+*.d
+
+# Editor / IDE
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Lokale Env- und Secret-Dateien
+.env
+.env.*
+**/.env
+**/.env.*
+**/Secrets.h
+secrets*
+*secret*
+*passwd*
+*password*
+*token*
+wifi*.h
+secrets_local.h
+credentials*.h
+
+# Server Secrets und Laufzeitdaten
+server/config/.env
+server/config/*.local.*
+server/config/mosquitto/mosquitto.conf
+server/config/mosquitto/passwd
+server/data/
+server/runtime/
+server/node_modules/
+
+# Lokale Overrides und temporaere Dateien
+private/
+*.local.*
+*.tmp
+*.log
+*.bak
+tmp/
+archive/

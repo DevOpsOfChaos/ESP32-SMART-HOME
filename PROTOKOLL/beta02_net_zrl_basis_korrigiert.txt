@@ -1,0 +1,54 @@
+Stand: beta02
+Datei: beta02_net_zrl_basis_korrigiert.txt
+Datum: 2026-03-10
+Autor: ChatGPT
+
+1. Anlass
+- Der von Claude gelieferte Stand v0.2.0 hatte eine saubere Idee
+  mit `COVER_MODUS_AKTIV`, aber die eigentliche Schaltfunktion war
+  trotzdem hart wie ein Rolladen implementiert.
+- Dadurch war NET-ZRL als allgemeine Zwei-Relais-Basis faktisch unbrauchbar
+  für Doppellampe, Außenlicht mit zwei Kreisen oder ähnliche Aktoren.
+
+2. Festgestellter Fehler
+- `schalteRelaisGesichert()` blockierte jedes Einschalten eines Relais,
+  wenn das jeweils andere Relais aktiv war.
+- Zusätzlich prüfte dieselbe Funktion immer die Reversier-Sperrzeit.
+- Diese Regeln sind nur für Rolladenbetrieb korrekt, nicht für die
+  allgemeine NET-ZRL-Basis.
+
+3. Korrektur
+- Rolladen-Schutzlogik wird jetzt nur noch angewendet,
+  wenn `COVER_MODUS_AKTIV = true` gesetzt ist.
+- Im Normalmodus (`false`) sind beide Relais unabhängig schaltbar.
+- Cover-Kommandos werden bei deaktiviertem Cover-Modus ignoriert,
+  statt halb falsch verarbeitet zu werden.
+- `stoppeFahrt()` und `aktualisiereRelaisVerriegelung()` beachten den
+  Cover-Modus jetzt ebenfalls korrekt.
+
+4. Verbesserungseffekt
+- NET-ZRL ist wieder eine echte Basisklasse statt einer verdeckten
+  Rolladen-Spezialklasse.
+- Architekturregel eingehalten: Basisklasse bleibt allgemein,
+  Sonderlogik wird nur bei aktivem Sondermodus zugeschaltet.
+- Außenlicht/Doppelschaltaktor lassen sich mit derselben Firmwarebasis
+  sauber ableiten.
+
+5. Trade-offs
+- Weniger "Sicherheitslogik" im allgemeinen Fall. Das ist aber kein
+  Verlust, sondern die Korrektur einer falschen Verallgemeinerung.
+- Der Anwender muss für echte Rolladen-Geräte `COVER_MODUS_AKTIV`
+  bewusst aktivieren.
+
+6. Test
+- Logische Codeprüfung durchgeführt.
+- Kein echter Hardware-Flash in dieser Session.
+- Nächster Praxistest:
+  a) COVER_MODUS_AKTIV=false -> beide Relais unabhängig schalten
+  b) COVER_MODUS_AKTIV=true  -> gegenseitige Verriegelung und Sperrzeit
+
+7. Lehrerblick (Eigenleistung vs. geklaut)
+- Die Korrektur ist fachlich gut begründbar, weil sie direkt aus der
+  Architekturregel "Basisklasse vs. Sondergerät" folgt.
+- Das ist kein kosmetischer KI-Umbau, sondern eine saubere
+  Architektur-Nachschärfung.

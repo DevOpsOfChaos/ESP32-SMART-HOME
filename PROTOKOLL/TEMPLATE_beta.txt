@@ -1,0 +1,26 @@
+Stand:
+Datei:
+Autor:
+
+1. Anlass
+- 
+
+2. Änderung
+- 
+
+3. Begründung
+- 
+
+4. Verbesserungseffekt
+- 
+
+5. Risiken / Trade-offs
+- 
+
+6. Teststatus
+- 
+
+7. Lehrerblick
+- Welche Eigenleistung steckt in diesem Stand?
+- Was wurde nur als Referenz genutzt?
+- Warum ist der Stand fachlich nachvollziehbar?

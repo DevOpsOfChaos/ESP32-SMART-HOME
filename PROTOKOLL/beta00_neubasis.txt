@@ -1,0 +1,40 @@
+Stand: beta00
+Datei: beta00_neubasis.txt
+Autor: Manuel Ries / ChatGPT-Arbeitsvorbereitung
+
+1. Anlass
+- Das Altprojekt ist als direkte Basis zu komplex, zu stark verkoppelt und nicht sauber veröffentlichbar.
+- Für GitHub, Techniker-Dokumentation und spätere Arbeit mit Claude/Codex wird eine saubere Neubasis benötigt.
+
+2. Änderung
+- Neues öffentliches Repo-Gerüst aufgesetzt.
+- Architektur und Codevorgaben verankert.
+- Altbestand in Referenz / Verwerfen zerlegt.
+- Server-Basis ergänzt.
+- Git- und Datenschutzregeln ergänzt.
+- Arbeitsmodus für Claude und Codex dokumentiert.
+
+3. Begründung
+- Ohne harte Trennung würde das Altchaos erneut in die neue Basis einsickern.
+- Die neue Struktur muss zuerst organisatorisch sauber sein, bevor echter Code stabil wachsen kann.
+
+4. Verbesserungseffekt
+- klarer push-/pull-fähiger Arbeitsbereich
+- saubere Public/Private-Trennung
+- bessere Grundlage für GitHub und Projektdoku
+- spätere Implementierung kann kontrolliert wachsen
+
+5. Risiken / Trade-offs
+- Noch kein echter Funktionscode in der Tiefe
+- Einige Entscheidungen sind absichtlich als Zielbild dokumentiert und noch nicht final implementiert
+- Kurzfristig weniger sichtbare Funktion, dafür deutlich weniger strukturelles Risiko
+
+6. Teststatus
+- Struktur erstellt
+- Dokumente konsolidiert
+- keine echte Firmware-/Server-Laufzeitfunktion validiert
+
+7. Lehrerblick
+- Eigenleistung liegt in der Architekturkonsolidierung, Bewertungslogik und sauberen Strukturtrennung.
+- Altprojekt wurde nicht übernommen, sondern kritisch zerlegt.
+- Das erhöht die Nachvollziehbarkeit und reduziert den Eindruck von blind kopiertem Fremdcode.

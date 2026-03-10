@@ -1,0 +1,116 @@
+Stand: beta01
+Datei: beta01_protokoll_und_firmware_basis.txt
+Datum: 2026-03-10
+Autor: Claude Sonnet (Neubasis-Aufbau im Auftrag)
+
+1. Anlass
+- beta00 hatte das Repo-Gerüst und die Dokumentation aufgebaut,
+  aber keine substanziellen Protokoll- oder Firmware-Dateien.
+- Ziel dieses Schritts: Protokolldefinition und Firmware-Gerüste
+  auf ein belastbares Fundament heben.
+
+2. Änderungen
+
+2.1 Neues Protokoll (firmware/lib/ShProtocol/src/Protocol.h)
+- Vollständig neu geschrieben – kein Altcode übernommen.
+- Gemeinsamer 10-Byte-Header mit: Magic, Protokollversion,
+  msg_type, seq, flags, payload_len, CRC16.
+- Acht saubere Nachrichtentypen: HELLO, HELLO_ACK, STATE, EVENT,
+  CMD, CFG, ACK, TIME.
+- Feste Payload-Strukturen für HELLO, HELLO_ACK, CMD, CFG, ACK, TIME.
+- TLV-Feld-IDs für STATE und EVENT (>30 Felder definiert).
+- EVENT-Typen vollständig definiert (Button, Motion, Fenster, Regen,
+  Relay, Licht, Rolladen, Boot, Sensorfehler, Kommfehler).
+- CFG-Parameter-IDs vollständig nach Gruppen strukturiert.
+- Hilfsfunktionen: fillHeader, isValidHeader, safeCopyDeviceId,
+  isValidDeviceId, isValidMac, macToString, calcCrc16.
+
+2.2 Gerätettyp-Definitionen (firmware/lib/ShProtocol/src/DeviceTypes.h)
+- Geräteklassen SH_CLASS_*: NET_ERL, NET_ZRL, NET_SEN, BAT_SEN, MASTER
+- Fähigkeits-Bitmasks SH_CAP_*: 16 Bits, Relay, Relay2, Temp, Hum,
+  Lux, AQI, Motion, Window, Rain, Battery, Button, MultiButton,
+  LedRing, Cover, SetupPortal
+- Power-Typen: SH_POWER_MAINS, SH_POWER_BATTERY
+
+2.3 Master main.cpp (firmware/src/master/main.cpp)
+- Vollständig neu strukturiert mit allen 15 Pflichtabschnitten.
+- RegistryEntry-Struktur (RAM, SH_MAX_DEVICES Slots).
+- Vollständige Funktionsprototypen für: HELLO-Verarbeitung,
+  Registry-Verwaltung, HELLO_ACK, STATE/EVENT/Availability/Meta
+  auf MQTT, Availability-Check, TIME-Verteilung.
+- ESP-NOW-Dispatch nach msg_type vollständig geskizzt.
+- Sicherheitslogik: Offline-Timeout je Power-Typ.
+- Alle Platzhalter klar als Platzhalter markiert.
+
+2.4 AppConfig.h und PinConfig.h für alle Geräte verbessert
+- Master: DEVICE_ID, WLAN_KANAL, TIME_SYNC_INTERVAL_S.
+- NET-ERL: STATE_INTERVAL_MS, BUTTON_DEBOUNCE_MS,
+  RELAY_DEFAULT_ON_BOOT, ACK_TIMEOUT_MS, MAX_RETRIES.
+- NET-ZRL: zusätzlich COVER_REVERSE_LOCK_MS und COVER_MODUS_AKTIV.
+- NET-SEN: STATE_INTERVAL_MS, Differenzmeldeschwellen.
+- BAT-SEN: SLEEP_INTERVAL_S, RX_WINDOW_MS, WACH_NACH_EVENT_MS.
+- Alle Zeitwerte mit Begründungen kommentiert.
+
+2.5 Gerätespezifische main.cpp für alle vier Nodes
+- Jede Datei hat vollständige 15-Abschnitt-Struktur.
+- Gerätespezifische Logik eingebaut (kein Clone-Chaos mehr):
+  - NET-ERL: Relaissteuerung, Tasterentprellung, Schaltreason,
+    EVENT-Dispatch, Automatik-Placeholder.
+  - NET-ZRL: Doppelrelais-Verriegelung (NIEMALS beide gleichzeitig),
+    Reversier-Sperrzeit nach Richtungswechsel, Cover-Dispatch.
+  - NET-SEN: Messwert-Differenzschwellen, PIR-Flankenauswertung.
+  - BAT-SEN: WakeReason-Enum, Reed-Kontakt, Batteriemessung-Placeholder,
+    Schlafsystem-Placeholder.
+
+2.6 Server-Infrastruktur ergänzt
+- server/config/mosquitto/mosquitto.example.conf erstellt.
+- server/config/docker-compose.example.yml verbessert (Volumes).
+- server/config/.env.example aktualisiert (TZ-Variable, Kommentare).
+- server/flows/README.md mit geplanten Flow-Tabellen.
+- server/db/README.md mit schematischen Tabellenentwürfen.
+- server/tools/README.md mit Skript-Übersicht.
+
+3. Begründung der Entscheidungen
+
+3.1 Neues Protokoll statt Altprotokoll
+Das Altprotokoll hatte gewachsene Sonderpakete (CMD_ROLLER_*,
+CMD_AIR_QUALITY_EXT, alte Sensormasken), die nicht sauber von der
+Architektur getrennt waren. Das neue Protokoll startet sauber mit
+TLV für STATE/EVENT und festen Payloads für Verwaltungsnachrichten.
+
+3.2 10-Byte-Header statt 4-Byte-Header
+Magic + CRC16 fehlen im Altprotokoll. Der Master hat dadurch keine
+robuste Möglichkeit, fremde ESP-NOW-Pakete oder Übertragungsfehler
+zu erkennen. Der neue Header schließt diese Lücke mit minimalem
+Overhead (10 von 250 Bytes = 4 %).
+
+3.3 Einfache Device-IDs (NET-ERL-001)
+Das Altprojekt codierte Sensorbestückung in die ID (NET-ERL-THLAP-001).
+Das koppelte ID-Schema und Hardware unnötig. Die neue ID ist bewusst
+dümmer: Klasse + Nummer. Fähigkeiten kommen über caps-Bitmask im HELLO.
+
+3.4 Offene Entscheidungen explizit markiert
+Alle noch nicht finalen Implementierungspunkte sind mit
+"Platzhalter" und "folgt in Phase X" markiert, damit klar ist,
+was zum Gerüst gehört und was noch implementiert werden muss.
+
+4. Teststatus
+- Keine Laufzeitvalidierung (kein echter Flash).
+- Compiler-Kompatibilität: Strukturen mit static_assert abgesichert.
+- Protokoll-Konsistenz: Header-Größe und Payload-Größen geprüft.
+
+5. Offene Entscheidungen
+
+- Konkrete ACK-Timeouts und Retry-Limits je Geräteklasse
+  (vorbereitet in AppConfig.h, noch nicht final justiert)
+- String-Übertragung für CFG_DEVICE_NAME (Sonderprotokoll nötig)
+- Verschlüsselungsrahmen (Schlüsselslots vorbereitet, noch nicht aktiv)
+- Deep-Sleep-Implementierung BAT-SEN (Plattform-spezifisch)
+- Dashboard-Technologie Server (Phase 5)
+
+6. Nächste Schritte (Phase 2)
+- WiFi.begin() mit festem Kanal im Master
+- ESP-NOW init und RX-Callback im Master
+- HELLO-Senden in allen Nodes
+- HELLO_ACK-Empfang und Kanalbestätigung
+- Erste End-to-End-Prüfung: Node -> Master (serieller Debug)
