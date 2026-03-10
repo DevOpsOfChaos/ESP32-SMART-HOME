@@ -1,21 +1,30 @@
 # Testplan
 
-## Ziel
-Die Basis soll schrittweise und nachvollziehbar geprüft werden.
+## Rolle dieser Datei
+Soll-Pruefplan. Diese Datei beschreibt, was geprueft werden soll, nicht was bereits belegt ist.
 
-## Phase 1 – Strukturtest
+Aktueller belegter Ist-Stand:
+- `docs/14_test_und_nachweisstand.md`
+
+## Ziel
+Die bestehende Basis soll schrittweise, reproduzierbar und ohne Schein-Nachweise geprueft werden.
+
+## Phase 1 – Repo- und Strukturpruefung
 - Repository-Struktur vollständig
 - keine privaten Dateien im öffentlichen Bereich
 - Beispielkonfigurationen vorhanden
-- Build- und Tool-Struktur nachvollziehbar
+- Rollen von Projektgedaechtnis, Fachdoku, Testplan, Nachweis und PROTOKOLL klar
 
-## Phase 2 – Firmware-Einzelnachweise
-- jeder Basisnode startet
-- Pins lassen sich initialisieren
-- Debug gezielt aktivierbar
+## Phase 2 – Firmware-Build pro Basisgeraet
+- `master`, `net_erl`, `net_zrl`, `net_sen`, `bat_sen` bauen
 - Basis-Konfiguration kompiliert
+- Buildartefakte werden nicht versioniert
 
-## Phase 3 – Protokolltest
+## Phase 3 – Build-, Flash- und Serientest
+- reproduzierbarer Ablauf fuer Build, Portwahl, Flash und seriellen Monitor dokumentiert
+- reale Startmeldungen und Basisverhalten pro Testgeraet nachvollziehbar
+
+## Phase 4 – Protokoll- und Transporttest
 - `HELLO` / `HELLO_ACK`
 - `STATE`
 - `EVENT`
@@ -25,19 +34,26 @@ Die Basis soll schrittweise und nachvollziehbar geprüft werden.
 - Duplikaterkennung
 - Retry-Verhalten
 
-## Phase 4 – End-to-End
+## Phase 5 – Server-V1
+- MQTT-Ingest gemaess `docs/04_mqtt_topics.md`
+- SQLite-Ablage gemaess `server/db/README.md`
+- Influx-Schreibpfad fuer numerische Sensorwerte
+- lokaler Broker-Start mit und ohne optionale Auth
+
+## Phase 6 – Reale End-to-End-Strecke
 - Node -> Master -> MQTT
 - MQTT -> Master -> Node
+- Server-Ingest
 - Availability
 - lokale Bedienung bleibt bei Masterverlust erhalten
 
-## Phase 5 – Gerätebezogene Tests
+## Phase 7 – Geraetebezogene Tests
 - `NET-ERL` einfache Lampe
 - `NET-ZRL` Rolladen-Grundfunktion
 - `NET-SEN` Standardsensor
 - `BAT-SEN` Fensterkontakt oder Wandschalter
 
-## Phase 6 – Langzeit / Robustheit
+## Phase 8 – Langzeit / Robustheit
 - Funkabbrüche
 - Neustarts
 - Sensorfehler

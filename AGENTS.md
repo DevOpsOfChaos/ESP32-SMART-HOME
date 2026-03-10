@@ -12,11 +12,21 @@ Ziel ist, dass neue Tasks meist nur noch aus der konkreten Einzelaufgabe bestehe
 ## Pflichtlektuere pro Task
 1. `AGENTS.md`
 2. `README.md`
-3. `docs/PROJECT_CONTEXT.md`
-4. `docs/CURRENT_SPRINT.md`
-5. `docs/TASK_QUEUE.md`
-6. `docs/DECISIONS.md`
-7. Falls im Scope: Bereichs-`AGENTS.md` in `firmware/`, `server/` oder `docs/`
+3. `docs/README.md`
+4. `docs/PROJECT_CONTEXT.md`
+5. `docs/CURRENT_SPRINT.md`
+6. `docs/TASK_QUEUE.md`
+7. `docs/DECISIONS.md`
+8. Falls Status, Tests oder reale Nachweise relevant sind: `docs/14_test_und_nachweisstand.md`
+9. Falls im Scope: Bereichs-`AGENTS.md` in `firmware/`, `server/` oder `docs/`
+
+## Verbindliche Doku-Rollen
+- `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/CURRENT_SPRINT.md`, `docs/TASK_QUEUE.md` und `docs/DECISIONS.md` bilden das offizielle Projektgedaechtnis fuer neue Chats.
+- `docs/README.md` ist der Doku-Index, nicht die Quelle fuer Projektentscheidungen.
+- `docs/06_testplan.md` beschreibt nur das Soll.
+- `docs/14_test_und_nachweisstand.md` beschreibt nur den belegten Ist-Stand.
+- `PROTOKOLL/` bleibt die historische Chronik einzelner Stande und wird nicht rueckwirkend geglaettet.
+- `CHANGELOG.md` ist die verdichtete Repo-Historie, kein Nachweisdokument.
 
 ## Architekturgrenzen
 - Nodes sprechen nur ESP-NOW.

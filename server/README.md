@@ -1,5 +1,12 @@
 # Server Basis V1
 
+## Rolle dieser Datei
+Bereichs-README fuer `server/`. Diese Datei beschreibt nur die Serverbasis und ihren Startpfad.
+
+Nicht diese Datei:
+- offizielles Projektgedaechtnis: `../AGENTS.md`, `../docs/PROJECT_CONTEXT.md`, `../docs/CURRENT_SPRINT.md`, `../docs/TASK_QUEUE.md`, `../docs/DECISIONS.md`
+- belegter Gesamtstatus: `../docs/14_test_und_nachweisstand.md`
+
 Diese V1 stellt das erste reproduzierbare Serverfundament bereit fuer:
 
 - Mosquitto
@@ -16,6 +23,14 @@ Diese V1 stellt das erste reproduzierbare Serverfundament bereit fuer:
 - operative Daten in SQLite
 - FlowFuse-Dashboard mit den V1-Seiten
 - Wetter nur vorbereitet, nicht fertig
+
+## Bereichsdoku im Server
+- `docs/00_server_ueberblick.md`
+- `docs/01_server_basisarchitektur.md`
+- `docs/02_dashboard_konzept.md`
+- `db/README.md`
+- `flows/README.md`
+- `config/README.md`
 
 ## MQTT-Ingest V1
 

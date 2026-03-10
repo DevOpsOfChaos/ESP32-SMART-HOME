@@ -1,16 +1,16 @@
 # TASK_QUEUE
 
 ## Prioritaet jetzt
-1. `net_erl` Minimalstrecke herstellen
-2. Master MQTT-Bridge auf Minimum begrenzen und absichern
-3. MQTT-Testablauf dokumentieren
-4. Offline-Erkennung pruefen
+1. Reale Build-/Flash-/Seriell-Schritte fuer `master` und `net_erl` als Runbook dokumentieren
+2. Einen konsolidierten realen End-to-End-Nachweis `Node -> Master -> MQTT/Server -> Master -> Node` dokumentieren
+3. Server-Start und lokaler Betrieb als belastbares Runbook ueber den Kurzstart hinaus dokumentieren
+4. Hardware-README-Dateien der Basisgeraete von Platzhaltern auf reale Mindestinformationen heben
 
 ## Danach
-5. `net_zrl` im Lampenmodus aufsetzen
-6. Cover-Logik erst spaeter und getrennt behandeln
+5. Test- und Nachweisdoku gegen neue reale Belege nachziehen
+6. Erst danach wieder Feature-Ausbau
 
 ## Arbeitsregel fuer die Queue
-- Erst Punkte aus dem oberen Block sauber schliessen.
-- Neue Aufgaben nur aufnehmen, wenn sie nicht den aktuellen Fokus verwischen.
-- Grosse Sammelauftraege vermeiden.
+- Nur reale Luecken aufnehmen.
+- Punkte erst streichen, wenn das zugehoerige Dokument oder der Nachweis wirklich im Repo liegt.
+- PROTOKOLL-Dateien nicht rueckwirkend ueberschreiben.

@@ -1,9 +1,12 @@
 # PROJECT_CONTEXT
 
+## Rolle dieser Datei
+Stabiler Projektrahmen fuer neue Chats. Keine Taskliste, kein Arbeitsjournal und kein Nachweisdokument.
+
 ## Projektziel
 Aufbau eines modularen, lokal betriebenen Smart-Home-Systems fuer das Technikerprojekt mit klarer Trennung zwischen Funkknoten, Master-Bridge und Server.
 
-## Aktuelle Architektur
+## Verbindliche Architekturgrenzen
 - Nodes sind Feldgeraete auf ESP32-Basis.
 - Nodes sprechen ausschliesslich ESP-NOW.
 - Der Master ist die einzige Bridge zwischen ESP-NOW und MQTT.
@@ -30,10 +33,22 @@ Aufbau eines modularen, lokal betriebenen Smart-Home-Systems fuer das Technikerp
 - Keine privaten Zugangsdaten im Repo.
 - Fuer Secrets nur Example-Dateien versionieren, zum Beispiel `Secrets.example.h` oder `.env.example`.
 
-## Projektgedaechtnis
-Diese Dateien sind der stabile Einstieg fuer neue Chats:
+## Verbindliche Dokumentrollen
+- `AGENTS.md`: Arbeitsanweisung und Lesereihenfolge fuer Codex/ChatGPT
+- `docs/README.md`: Doku-Index
+- `docs/PROJECT_CONTEXT.md`: stabiler Projektrahmen
+- `docs/CURRENT_SPRINT.md`: aktueller Fokus
+- `docs/TASK_QUEUE.md`: naechste reale Arbeitspakete
+- `docs/DECISIONS.md`: dauerhafte Entscheidungen
+- `docs/06_testplan.md`: Soll-Pruefplan
+- `docs/14_test_und_nachweisstand.md`: belegter Ist-Stand
+- `PROTOKOLL/`: historische Einzelstaende
+
+## Offizielles Projektgedaechtnis fuer neue Chats
 - `AGENTS.md`
 - `docs/PROJECT_CONTEXT.md`
 - `docs/CURRENT_SPRINT.md`
 - `docs/TASK_QUEUE.md`
 - `docs/DECISIONS.md`
+
+Aktuelle Test- und Statusaussagen gehoeren nicht hierher, sondern nach `docs/14_test_und_nachweisstand.md`.

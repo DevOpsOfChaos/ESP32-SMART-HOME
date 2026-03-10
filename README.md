@@ -14,10 +14,12 @@ Es ist die neue, veröffentlichbare Arbeitsbasis für:
 
 ## Aktueller lauffaehiger Stand
 Stand 2026-03-10:
-- reale Minimalstrecke `net_erl_01 -> master -> MQTT -> master -> net_erl_01`
-- feste Basisgeraete `net_zrl_01`, `net_sen_01` und `bat_sen_01` sind jetzt ebenfalls in dieselbe Firmware-Linie integriert
-- Hardware-nachgewiesen bleibt in diesem Stand nur die `net_erl`-Minimalstrecke; die drei weiteren Basen sind Build-/Code-integriert, aber nicht geflasht oder praktisch verifiziert
-- Kurzbeschreibung, Testablauf und Grenzen: `docs/14_minimalstrecke_net_erl_master.md`
+- realer Bring-up von `master <-> net_erl` ist im Repo dokumentiert
+ - die Server-V1 hat getrennte Nachweise fuer MQTT-Ingest und Influx-Schreibpfad
+- feste Basisgeraete `net_zrl_01`, `net_sen_01` und `bat_sen_01` sind in dieselbe Firmware-Linie integriert, aber nicht als reale Hardwarebasis nachgewiesen
+- ein konsolidierter realer Gesamt-Nachweis `Node -> Master -> MQTT/Server -> Master -> Node` ist als offizieller Beleg noch offen
+- belegter Ist-Stand: `docs/14_test_und_nachweisstand.md`
+- Detailblatt der Minimalstrecke: `docs/14_minimalstrecke_net_erl_master.md`
 - verbindlicher Hardware-Pinstandard: `docs/15_hardware_pinstandard.md`
 
 ## Projektprinzip
@@ -77,12 +79,12 @@ verwendet werden.
 Er darf **nicht** als neue Basis hineinkopiert werden.
 
 ## Einstieg
-1. `docs/01_architektur.md`
-2. `docs/02_codevorgabe.md`
-3. `docs/03_protokoll.md`
-4. `docs/04_mqtt_topics.md`
-5. `docs/08_altbestand_zerlegung.md`
-6. `docs/11_implementierungsphasen.md`
+1. `docs/README.md`
+2. `AGENTS.md`
+3. `docs/PROJECT_CONTEXT.md`
+4. `docs/CURRENT_SPRINT.md`
+5. `docs/TASK_QUEUE.md`
+6. `docs/DECISIONS.md`
 
 ## Steuerdateien fuer neue Chats
 Diese Dateien halten den Projektkontext im Repository und nicht im Chatverlauf:
@@ -92,6 +94,10 @@ Diese Dateien halten den Projektkontext im Repository und nicht im Chatverlauf:
 - `docs/CURRENT_SPRINT.md`
 - `docs/TASK_QUEUE.md`
 - `docs/DECISIONS.md`
+
+Fuer Test- und Statusaussagen zusaetzlich:
+
+- `docs/14_test_und_nachweisstand.md`
 
 ## Arbeitsregeln fuer dieses Repository
 - Code-Arbeitsordner lokal: `C:\Users\mries\Documents\Playground\smarthome-esp32`

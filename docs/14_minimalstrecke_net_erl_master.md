@@ -1,5 +1,11 @@
 # Minimalstrecke net_erl_01 <-> master
 
+## Rolle dieses Dokuments
+Dieses Dokument beschreibt die technische Minimalstrecke und einen manuellen Pruefablauf. Es ist kein globales Nachweisdokument.
+
+Belegter Ist-Stand:
+- `docs/14_test_und_nachweisstand.md`
+
 ## Kurzbeschreibung
 Die erste lauffaehige Vertikalstrecke ist bewusst auf genau ein Pilotgeraet begrenzt:
 

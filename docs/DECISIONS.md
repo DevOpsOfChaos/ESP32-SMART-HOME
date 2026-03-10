@@ -105,5 +105,12 @@ Forecast-Ansichten und Szenen bekommen in V1 keine eigene UI-Stufe.
 Grund:
 Die erste UI-Stufe soll nur die notwendige Betriebsbasis zeigen und nicht wieder zu frueh in Komfortflaeche ausufern.
 
+## D-016 Projektgedaechtnis, Testplan, Nachweis und Historie bleiben getrennt
+Entscheidung:
+Das offizielle Projektgedaechtnis fuer neue Chats lebt in `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/CURRENT_SPRINT.md`, `docs/TASK_QUEUE.md` und `docs/DECISIONS.md`. `docs/README.md` dient nur als Index. `docs/06_testplan.md` beschreibt nur den Soll-Pruefplan, `docs/14_test_und_nachweisstand.md` nur den belegten Ist-Stand und `PROTOKOLL/` bleibt die historische Chronik einzelner Stande.
+
+Grund:
+Ohne diese Trennung verwischen Arbeitsauftrag, Architekturwissen, Testabsicht und echte Nachweise. Dann behauptet das Repo frueher oder spaeter Dinge, die es nicht belastbar belegen kann.
+
 ## Pflegehinweis
 Neue Architektur- oder Arbeitsentscheidungen hier kurz mit Entscheidung und Grund ergaenzen. Keine langen Rechtfertigungen, nur belastbare Regeln.
