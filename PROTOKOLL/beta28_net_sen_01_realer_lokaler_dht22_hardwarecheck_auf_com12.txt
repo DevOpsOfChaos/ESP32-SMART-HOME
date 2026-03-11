@@ -1,0 +1,105 @@
+Stand: beta28
+Datei: beta28_net_sen_01_realer_lokaler_dht22_hardwarecheck_auf_com12.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Fuer `net_sen_01` sollte der echte lokale Hardwarecheck auf `COM12` im aktuellen Repo-Stand gefahren werden.
+- Der Scope war bewusst hart begrenzt:
+  - `master` auf `COM3` bleibt unberuehrt
+  - `net_erl_01` extern nicht stoeren
+  - `net_zrl_01` nicht anfassen
+  - keine Server-, MQTT- oder Influx-Aussagen
+
+2. Aenderung
+- Keine neue Firmware-Funktion und keine Architektur-Aenderung.
+- Reale Ausfuehrung nur des vorhandenen `net_sen`-Pfads:
+  - `platformio run -e net_sen`
+  - `platformio run -e net_sen -t upload --upload-port COM12`
+  - zweiter Upload desselben Stands auf `COM12` mit unmittelbar anschliessender serieller Mitschrift fuer den frischen Start
+- Reale Portbestaetigung nur fuer den pruefenden Node:
+  - `platformio device list`
+  - `Win32_SerialPort`
+  - Upload-MAC aus `esptool`: `20:6e:f1:6a:df:5c`
+
+3. Reale Befunde
+- `COM3` und `COM12` sind lokal weiter klar getrennt:
+  - `COM3` -> `USB VID:PID=303A:1001 SER=20:6E:F1:6D:92:C0`
+  - `COM12` -> `USB VID:PID=303A:1001 SER=20:6E:F1:6A:DF:5C`
+- Der Upload auf `COM12` lief real erfolgreich durch; `esptool` meldete denselben ESP32-C3 mit MAC `20:6e:f1:6a:df:5c`.
+- Der frische serielle Start auf `COM12` war real sichtbar:
+  - `setup() gestartet`
+  - `SmartHome ESP32`
+  - `NET-SEN v0.2.3`
+  - `Node-ID: net_sen_01`
+  - `Minimalpfad: DHT22 an GPIO6`
+  - `Peer angelegt: FF:FF:FF:FF:FF:FF`
+  - `ESP-NOW bereit auf Kanal 6`
+  - `HELLO gesendet`
+  - `ESP-NOW Sendestatus an FF:FF:FF:FF:FF:FF: OK`
+  - `HELLO_ACK empfangen, Master-Kanal=6`
+  - `Master-MAC: 20:6E:F1:6D:92:C0`
+- Der DHT22-Pfad lief danach real in den Fehlerzustand, nicht in plausible Messwerte:
+  - `DHT22 READ GPIO6 versuch=1`
+  - `DHT22 FEHLER GPIO6: 0.0C/0.0% unplausibel (typisches Nullframe-/Verdrahtungsbild)`
+  - `DHT22 HINWEIS: seit Boot keine gueltige Messung; GPIO6/VCC/GND/Pull-up pruefen`
+- Auch im weiteren Lauf erschienen wiederholt nur `DHT22 FEHLER ...` und `DHT22 HINWEIS ...`, aber kein `DHT22 OK temp=... hum=...`.
+- Der Node blieb dabei funktionsfaehig:
+  - `STATE_REPORT gesendet`
+  - `HEARTBEAT gesendet`
+  - Sendestatus an die Master-MAC war jeweils `OK`
+- Nicht real bestaetigt:
+  - physische Verdrahtung `VCC`/`GND`/`DATA`
+  - Vorhandensein eines Pull-ups
+  - Zustand des konkreten DHT22 selbst
+  - plausible Temperatur-/Feuchtewerte
+- Diese Punkte waren aus dem Terminal allein nicht sicher pruefbar und wurden deshalb nicht behauptet.
+
+4. Begruendung
+- Der aktuelle lokale Firmwarepfad scheitert nicht mehr am Boot, nicht am `HELLO` und nicht am `HELLO_ACK`.
+- Der reale Fehler sitzt nach dem erfolgreichen Funk-Handshake im DHT22-Pfad auf `GPIO6`.
+- Das beobachtete Nullframe-Bild passt zu einem elektrischen Problem oder einem defekten Sensor:
+  - Verdrahtung
+  - Pull-up
+  - Versorgung
+  - DHT22 selbst
+- Was dieser Lauf gerade nicht hergibt:
+  - eine saubere Trennung zwischen diesen vier Hardwareursachen
+  - die Behauptung, der lokale Firmwarepfad sei weiterhin der Hauptblocker
+
+5. Verbesserungseffekt
+- Fuer den aktuellen Repo-Stand gibt es jetzt einen echten lokalen Hardware-Nachweis auf `COM12`, nicht nur einen Build oder alten Bring-up-Verweis.
+- Der Nachweis ist eng und ehrlich:
+  - `HELLO_ACK` real sichtbar
+  - DHT-Diagnose real sichtbar
+  - keine Fake-Messwerte
+- Der naechste Schritt ist dadurch enger statt breiter: erst den realen DHT22-Hardwarepfad auf `net_sen_01` klaeren, dann erst wieder ueber Servernachweise reden.
+
+6. Risiken / Trade-offs
+- Kein DHT22-Erfolg ist belegt.
+- Ohne physische Sicht- oder Messpruefung bleibt offen, ob das Problem am Pull-up, an `VCC`, an `GND`, an der Datenleitung oder am Sensor selbst liegt.
+- Der Task liefert bewusst keinen MQTT-, SQLite- oder Influx-Nachweis.
+
+7. Teststatus
+- Ausgefuehrt:
+  - Pflichtdoku, Protokolle und relevante Firmware-Dateien gelesen
+  - `platformio device list`
+  - `Get-CimInstance Win32_SerialPort`
+  - `platformio run -e net_sen`
+  - `platformio run -e net_sen -t upload --upload-port COM12`
+  - zweiter realer Upload desselben Stands auf `COM12` fuer frischen seriellen Mitschnitt
+  - serielle Mitschnitte auf `COM12` waehrend Lauf und direkt nach frischem Reset
+- Nicht ausgefuehrt:
+  - physische Umverdrahtung oder Messung am Board
+  - Server-, MQTT-, SQLite- oder Influx-Pruefung
+  - Aenderungen an `master`, `net_erl_01` oder `net_zrl_01`
+
+8. Lehrerblick
+- Die Eigenleistung liegt in der sauberen Trennung zwischen belastbarem Realnachweis und Wunschdenken:
+  - Port verifiziert
+  - Build verifiziert
+  - Flash verifiziert
+  - `HELLO_ACK` verifiziert
+  - DHT-Fehlerbild verifiziert
+- Als Referenz dienten nur die versionierte Repo-Basis, die vorhandenen `net_sen`-Protokolle und die real beobachtete Hardware auf `COM12`.
+- Fachlich nachvollziehbar ist der Stand, weil der Lauf nicht als Erfolg umetikettiert wurde: der Funkpfad ist real okay, der DHT22-Pfad ist real weiter offen.
