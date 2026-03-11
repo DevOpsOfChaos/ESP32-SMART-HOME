@@ -12,12 +12,16 @@ Es ist die neue, veröffentlichbare Arbeitsbasis für:
 - Dokumentation, Testplanung und Änderungsprotokolle
 - saubere GitHub- und Secrets-Trennung
 
-## Aktueller lauffaehiger Stand
-Stand 2026-03-10:
-- realer Bring-up von `master <-> net_erl` ist im Repo dokumentiert
- - die Server-V1 hat getrennte Nachweise fuer MQTT-Ingest und Influx-Schreibpfad
+## Aktueller belegter Stand
+Stand 2026-03-11:
+- reale Bring-up- und MQTT-Minimalstrecke `master <-> net_erl_01` ist im Repo dokumentiert
+- der offizielle serverseitige Rueckweg fuer `net_erl_01` ueber Node-RED ist belegt
+- das SQLite-Audit fuer ausgehende serverseitige `cmd/set`-Publishes ist belegt
+- der kombinierte Live-Nachweis im aktuellen Repo-Stand ist fuer genau diesen Pilotpfad belegt:
+  `Node-RED -> cmd/set -> audit_log egress -> Master -> net_erl -> MQTT state -> device_last_state`
+- die Server-V1 hat zusaetzlich getrennte Nachweise fuer MQTT-Ingest und Influx-Schreibpfad
 - feste Basisgeraete `net_zrl_01`, `net_sen_01` und `bat_sen_01` sind in dieselbe Firmware-Linie integriert, aber nicht als reale Hardwarebasis nachgewiesen
-- ein konsolidierter realer Gesamt-Nachweis `Node -> Master -> MQTT/Server -> Master -> Node` ist als offizieller Beleg noch offen
+- offen bleiben ACK/Retry, Langzeitstabilitaet, Offline-Timeout, weitere Basisgeraete und ein vollstaendiger Gesamtprojektnachweis
 - belegter Ist-Stand: `docs/14_test_und_nachweisstand.md`
 - Detailblatt der Minimalstrecke: `docs/14_minimalstrecke_net_erl_master.md`
 - verbindlicher Hardware-Pinstandard: `docs/15_hardware_pinstandard.md`

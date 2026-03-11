@@ -6,7 +6,9 @@ Ein kleines, einheitliches und erweiterbares ESP-NOW-Protokoll für alle Basisge
 ## Implementierungsstatus
 - Definitionen in `firmware/lib/ShProtocol/src/Protocol.h`
 - Geräteklassen und Fähigkeiten in `firmware/lib/ShProtocol/src/DeviceTypes.h`
-- Minimalstrecke `net_erl_01 <-> master` ist seit `beta03` real implementiert
+- Minimalstrecke `net_erl_01 <-> master` ist seit `beta03` als Pilotpfad technisch angelegt
+- realer Hardware- und MQTT-Minimalpfad fuer `net_erl_01` ist spaeter ueber `beta06` und `beta11` belegt
+- offizieller serverseitiger Rueckweg und kombinierter Live-Nachweis im aktuellen Repo-Stand sind fuer `net_erl_01` getrennt ueber `beta12` bis `beta14` belegt
 - Breitere Laufzeitimplementierung für weitere Geräte bleibt offen
 
 ## Feste Nachrichtentypen

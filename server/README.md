@@ -24,6 +24,14 @@ Diese V1 stellt das erste reproduzierbare Serverfundament bereit fuer:
 - FlowFuse-Dashboard mit den V1-Seiten
 - Wetter nur vorbereitet, nicht fertig
 
+## Belegter V1-Stand per 2026-03-11
+
+- MQTT-Ingest/SQLite-Ablage und Influx-Schreibpfad sind real lokal nachgewiesen
+- der offizielle serverseitige Rueckweg fuer `net_erl_01` ueber Node-RED ist nachgewiesen
+- das SQLite-Audit fuer ausgehende `smarthome/node/net_erl_01/cmd/set`-Publishes ist nachgewiesen
+- der kombinierte Live-Nachweis im aktuellen Repo-Stand bleibt bewusst eng auf `net_erl_01` begrenzt
+- offen bleiben ACK/Retry, Offline-Timeout, Langzeitstabilitaet, weitere Basisgeraete und ein vollstaendiger Gesamtprojektnachweis
+
 ## Bereichsdoku im Server
 - `docs/00_server_ueberblick.md`
 - `docs/01_server_basisarchitektur.md`

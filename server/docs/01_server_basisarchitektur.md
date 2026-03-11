@@ -25,6 +25,12 @@
 7. numerische Sensorwerte aus `node/.../state.sensors` werden als einzelne `smarthome_sensor`-Punkte nach InfluxDB geschrieben
 8. Dashboard liest aus SQLite und Live-Datenstroemen
 
+## Realer Nachweisstand dieser Architektur
+
+- im Repo real belegt: MQTT-Ingest, SQLite-Ablage, Influx-Schreibpfad, offizieller Node-RED-Rueckweg fuer `net_erl_01`, SQLite-Audit fuer ausgehende `cmd/set`-Publishes und kombinierter Live-Lauf im aktuellen Repo-Stand
+- der belegte Command-/Rueckweg ist bewusst kein generischer Multi-Device-Baukasten, sondern nur der enge `net_erl_01`-Pilotpfad
+- offen bleiben ACK/Retry, Offline-Timeout, Langzeitstabilitaet, weitere Basisgeraete und ein vollstaendiger Gesamtprojektnachweis
+
 ## V1-Grenzen
 
 - keine Zusatzdienste ausser Mosquitto, Node-RED und InfluxDB
