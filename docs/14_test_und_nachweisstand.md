@@ -22,7 +22,8 @@ Nicht diese Datei:
 | `master <-> net_zrl` Bring-up inkl. HEARTBEAT und `STATE_REPORT` | nachgewiesen | real hardware | `PROTOKOLL/beta15_net_zrl_realer_bringup_und_blockade_offizieller_serverpfad.txt` |
 | `master`, `net_erl`, `net_zrl`, `net_sen`, `bat_sen` Buildbasis | nachgewiesen | build | `PROTOKOLL/beta04_hardware_pinstandard_und_pinfixes.txt`, `PROTOKOLL/beta07_basisgeraete_net_zrl_net_sen_bat_sen.txt` |
 | Kombinierter Live-Nachweis im aktuellen Repo-Stand fuer `net_zrl_01` (`Node-RED -> cmd/set -> audit_log egress -> Master -> net_zrl -> MQTT state -> device_last_state`) | nachgewiesen | real hardware, real lokal | `PROTOKOLL/beta16_net_zrl_kombinierter_live_nachweis_offizieller_serverpfad_aktueller_repo_stand.txt` |
-| `net_sen`, `bat_sen` reale Hardwarebasis | offen | offen | kein eigener Hardware-Nachweis im Repo |
+| `net_sen_01` lokaler Bring-up auf `COM12` bis `HELLO_ACK`, `STATE_REPORT` und `HEARTBEAT` | nachgewiesen | real hardware | `PROTOKOLL/beta26_net_sen_01_lokaler_bringup_hello_ack_auf_com12.txt` |
+| `bat_sen` reale Hardwarebasis | offen | offen | kein eigener Hardware-Nachweis im Repo |
 | Server-V1 MQTT-Ingest und SQLite-Ablage | nachgewiesen | real lokal | `PROTOKOLL/beta08_server_mqtt_ingest_realpayloads.txt` |
 | Influx-Schreibpfad fuer numerische Sensorwerte | nachgewiesen | real lokal | `PROTOKOLL/beta09_influx_schreibpfad_verifiziert.txt` |
 | Lokale MQTT-Broker-Auth in der Serverbasis | offen | offen | kein getrackter Nachweis im Repo-Stand |
@@ -60,6 +61,7 @@ Nicht diese Datei:
 - ACK-/Retry-Nachweis fuer weitere Basisgeraete oder weitere Command-Pfade jenseits der jetzt belegten offiziellen `net_erl_01`- und `net_zrl_01`-`cmd/set`-Pilotpfade
 - Langzeitstabilitaet fuer weitere offizielle Pfade oder Mehrgeraetebetrieb jenseits der jetzt belegten Pilotpfade `master <-> net_erl_01` und `master <-> net_zrl_01`
 - weitere serverseitige Rueckweg-Nachweise fuer andere Basisgeraete als `net_erl_01` und `net_zrl_01`
-- reale Hardware-Nachweise fuer `net_sen` und `bat_sen`
+- reale DHT22-/Messwert- und offizielle Servernachweise fuer `net_sen`
+- reale Hardware-Nachweise fuer `bat_sen`
 - vollstaendiger Gesamtprojektnachweis ueber die belegten `net_erl_01`- und `net_zrl_01`-Pilotpfade hinaus
 - Hardware-README-Dateien enthalten noch keine belastbaren Mindestdaten zu Platine, Pins, Flash und Variationen

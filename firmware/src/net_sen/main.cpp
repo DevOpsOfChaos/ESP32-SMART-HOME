@@ -65,6 +65,7 @@ struct NodeState {
     unsigned long letztes_hello_ms;
     unsigned long letzter_heartbeat_ms;
     unsigned long letzter_state_ms;
+    unsigned long letzter_state_wait_log_ms;
     uint8_t master_mac[6];
     uint8_t naechste_seq;
 };
@@ -110,6 +111,10 @@ void logMac(const char* prefix, const uint8_t* mac) {
     logf("INFO", "%s%s", prefix, macText);
 }
 
+bool istBroadcastMac(const uint8_t* mac) {
+    return mac != nullptr && memcmp(mac, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0;
+}
+
 uint16_t ermittleCaps() {
     uint16_t caps = SH_CAP_TEMP | SH_CAP_HUM;
     if (PIN_PIR >= 0) {
@@ -119,7 +124,8 @@ uint16_t ermittleCaps() {
 }
 
 bool stellePeerSicher(const uint8_t* mac) {
-    if (mac == nullptr || !SmartHome::isValidMac(mac)) return false;
+    if (mac == nullptr) return false;
+    if (!istBroadcastMac(mac) && !SmartHome::isValidMac(mac)) return false;
     if (esp_now_is_peer_exist(mac)) return true;
 
     esp_now_peer_info_t peerInfo = {};
@@ -273,7 +279,9 @@ void initialisiereFunk() {
         return;
     }
 
-    stellePeerSicher(BROADCAST_MAC);
+    if (!stellePeerSicher(BROADCAST_MAC)) {
+        logf("WARN", "Broadcast-Peer konnte nicht vorbereitet werden");
+    }
     logf("INFO", "ESP-NOW bereit auf Kanal %d", WLAN_KANAL);
 }
 
@@ -480,14 +488,19 @@ void setup() {
     }
 
     nodeStatus = {};
+    logf("INFO", "setup() gestartet");
     gibStartmeldungAus();
+    logf("INFO", "Initialisiere Hardware");
     initialisiereHardware();
+    logf("INFO", "Initialisiere Funk");
     initialisiereFunk();
 
     esp_now_register_send_cb(onEspNowSent);
     esp_now_register_recv_cb(onEspNowReceive);
 
-    sendeHello();
+    if (!sendeHello()) {
+        logf("WARN", "Erstes HELLO konnte lokal nicht gesendet werden");
+    }
 }
 
 void loop() {
@@ -505,6 +518,15 @@ void loop() {
     }
 
     if (dhtStateBereit() &&
+        !nodeStatus.master_mac_gueltig &&
+        nodeStatus.state_report_offen &&
+        (jetzt - nodeStatus.letzter_state_wait_log_ms) >= HELLO_RETRY_INTERVAL_MS) {
+        nodeStatus.letzter_state_wait_log_ms = jetzt;
+        logf("WARN", "STATE_REPORT geparkt: Master-MAC unbekannt");
+    }
+
+    if (nodeStatus.master_mac_gueltig &&
+        dhtStateBereit() &&
         (nodeStatus.state_report_offen || (jetzt - nodeStatus.letzter_state_ms) >= STATE_INTERVAL_MS)) {
         sendeStateReport();
     }

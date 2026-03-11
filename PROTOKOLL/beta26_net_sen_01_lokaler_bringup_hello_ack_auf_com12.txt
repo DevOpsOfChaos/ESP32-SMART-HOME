@@ -1,0 +1,103 @@
+Stand: beta26
+Datei: beta26_net_sen_01_lokaler_bringup_hello_ack_auf_com12.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Fuer den lokalen `net_sen_01`-Pruefling auf `COM12` sollte geklaert werden, warum nach sauberem Flash kein beobachtbarer HELLO-/Online-Eintritt sichtbar war.
+- Der Auftrag war bewusst eng:
+  - `master` auf `COM3` bleibt unberuehrt
+  - keine Server-, Node-RED- oder Influx-Arbeit
+  - nur lokaler Bring-up bis zur ersten echten Laufzeitstufe
+
+2. Aenderung
+- Minimale Diagnose- und Robustheitskorrektur nur in `firmware/src/net_sen/main.cpp`:
+  - Broadcast-MAC `FF:FF:FF:FF:FF:FF` fuer `HELLO` im Peer-Pfad zugelassen
+  - fruehe serielle Marker fuer `setup()`, Hardware-Init und Funk-Init ergaenzt
+  - erstes `HELLO` bei Fehlschlag explizit geloggt
+  - `STATE_REPORT` wird vor `HELLO_ACK` nicht mehr im 50-ms-Takt mit Warnspam gegen den Monitor gefahren, sondern nur geparkt
+- Keine Aenderung an `master`, Server, MQTT-Topics, Architektur oder weiterer Sensorik.
+
+3. Reale Befunde
+- Portidentifikation lokal erneut verifiziert:
+  - `COM3` -> `USB VID:PID=303A:1001 SER=20:6E:F1:6D:92:C0`
+  - `COM12` -> `USB VID:PID=303A:1001 SER=20:6E:F1:6A:DF:5C`
+- Vor der Korrektur war `COM12` nicht tot:
+  - ueber den seriellen Monitor waren laufende Runtime-Logs sichtbar
+  - der Pruefling kam also real bis in die Applikations-Firmware und in `loop()`
+  - sichtbar waren jedoch nur DHT22-Logs und `STATE_REPORT wartet auf HELLO_ACK`
+- Der eigentliche lokale Blocker lag im `net_sen`-Code:
+  - `sendeHello()` zielte auf die Broadcast-MAC
+  - `stellePeerSicher()` verwarf Broadcast jedoch selbst als ungueltige MAC
+  - Folge: kein `HELLO`, kein `HELLO_ACK`, kein Online-Eintritt
+- Nach Build, Flash und Reset auf `COM12` war der reale Bring-up lokal sichtbar:
+  - ROM-Bootlog
+  - `setup() gestartet`
+  - `Peer angelegt: FF:FF:FF:FF:FF:FF`
+  - `ESP-NOW bereit auf Kanal 6`
+  - `HELLO gesendet`
+  - `ESP-NOW Sendestatus an FF:FF:FF:FF:FF:FF: OK`
+  - `HELLO_ACK empfangen, Master-Kanal=6`
+  - `Master-MAC: 20:6E:F1:6D:92:C0`
+  - danach `STATE_REPORT gesendet` und `HEARTBEAT gesendet`
+- Der DHT22-Pfad war dabei nicht der Boot-Blocker:
+  - die erste sichtbare DHT22-Meldung kam erst nach erfolgreichem `HELLO`/`HELLO_ACK`
+  - beobachtet wurden mehrfach `DHT22 temp=0.0C hum=0.0%`
+  - damit ist `GPIO6` im Code aktiv, aber ein echter Sensorwertnachweis ist noch nicht erbracht
+
+4. Begruendung
+- Das Problem war nicht Flash, nicht COM12, nicht ein generelles Bootversagen und nicht der Serverpfad.
+- Der Fehler war lokal und frueh:
+  - der Node hat seinen eigenen Broadcast-HELLO intern abgewuergt
+- Der Warnspam vor `HELLO_ACK` war zusaetzlich schlecht, weil er die Diagnose verschleierte, obwohl der eigentliche Fehler davor lag.
+
+5. Verbesserungseffekt
+- Der `net_sen_01`-Pruefling auf `COM12` bootet jetzt lokal beobachtbar in die Anwendungs-Firmware.
+- Der erste echte Laufzeitpfad ist sichtbar und belegt:
+  - Boot
+  - `setup()`
+  - ESP-NOW-Init
+  - `HELLO`
+  - `HELLO_ACK`
+  - erster `STATE_REPORT`
+  - erster `HEARTBEAT`
+- Die verbleibende Unsicherheit sitzt jetzt enger:
+  - nicht mehr im HELLO-Bootpfad
+  - sondern im realen DHT22-/Verdrahtungs-/Messwertpfad und im spaeteren offiziellen Servernachweis
+
+6. Risiken / Trade-offs
+- Dieser Stand beweist keinen vollstaendigen `net_sen_01`-Erfolg.
+- Nicht bewiesen sind weiterhin:
+  - echte plausible Temperatur-/Feuchtewerte
+  - der offizielle serverseitige Rueckweg fuer `net_sen_01`
+  - Verhalten bei elektrisch fehlendem oder falsch verdrahtetem DHT22 als Realversuch
+- Die seriellen Beobachtungen zeigen aber klar, dass der erste HELLO-Pfad nicht mehr am DHT22 haengen bleibt.
+
+7. Teststatus
+- Ausgefuehrt:
+  - Pflichtdoku und relevante Firmware-Dateien gelesen
+  - `platformio device list`
+  - `platformio run -e net_sen`
+  - serielle COM12-Beobachtung vor der Korrektur
+  - `platformio run -e net_sen -t upload --upload-port COM12`
+  - serielle COM12-Beobachtung nach Flash und Reset
+- Real serielle Kernbeobachtung nach der Korrektur:
+  - ROM-Bootlog sichtbar
+  - Startbanner sichtbar
+  - `HELLO gesendet` sichtbar
+  - `HELLO_ACK empfangen` sichtbar
+  - `STATE_REPORT gesendet` sichtbar
+  - `HEARTBEAT gesendet` sichtbar
+- Nicht ausgefuehrt:
+  - Server-/MQTT-/SQLite-/Influx-Pruefung fuer diesen Stand
+  - physischer Umverdrahtungsversuch am DHT22
+  - Nachweis echter plausibler DHT22-Messwerte
+
+8. Lehrerblick
+- Die Eigenleistung liegt hier in der sauberen Trennung der Fehlerklassen:
+  - Board bootet
+  - Serial ist sichtbar
+  - DHT22 blockiert den Erst-HELLO nicht
+  - der fruehe Funkfehler lag in der lokalen Broadcast-Behandlung
+- Als Referenz dienten nur der aktuelle Repo-Stand, die vorhandenen Node-Basen und die reale Beobachtung auf `COM12`.
+- Fachlich nachvollziehbar ist der Stand, weil Ursache, Minimalfix und reale Boot-/HELLO-/ACK-Logs direkt zusammenpassen.
