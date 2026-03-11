@@ -16,7 +16,9 @@ def run(cmd, cwd=None, check=True, capture=False):
         shell=True,
         check=check,
         text=True,
-        capture_output=capture
+        capture_output=capture,
+        encoding="utf-8",
+        errors="replace"
     )
 
 
@@ -62,7 +64,9 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
     temp_prompt = worktree_path / ".night_stage_prompt.md"
     temp_prompt.write_text(prompt_text, encoding="utf-8")
 
-    log_file = LOG_DIR / f"{stage_id}.log"
+    stdout_text = result.stdout or ""
+    stderr_text = result.stderr or ""
+    log_file.write_text(stdout_text + "\n\nSTDERR:\n" + stderr_text, encoding="utf-8")
     cmd = (
         'codex exec --full-auto --sandbox workspace-write '
         '"Read AGENTS.md and the project memory files first. '
@@ -81,7 +85,9 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
         else:
             write_status(stage_id, "partial", "No file changes detected.")
     except subprocess.CalledProcessError as e:
-        output = (e.stdout or "") + "\\n\\nSTDERR:\\n" + (e.stderr or "")
+        stdout_text = e.stdout or ""
+        stderr_text = e.stderr or ""
+        output = stdout_text + "\n\nSTDERR:\n" + stderr_text
         log_file.write_text(output, encoding="utf-8")
         write_status(stage_id, "blocked", "Stage failed; see log.")
         return False
