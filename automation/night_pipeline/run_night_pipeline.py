@@ -30,24 +30,27 @@ def write_status(stage_id: str, status: str, note: str = ""):
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "note": note
     }
-    status_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    status_file.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False),
+        encoding="utf-8"
+    )
 
 
 def git_has_changes(repo_path: Path) -> bool:
     result = run("git status --porcelain", cwd=repo_path, check=True, capture=True)
-    return bool(result.stdout.strip())
+    return bool((result.stdout or "").strip())
 
 
-def ensure_worktree(base_repo: Path, branch: str, worktree_path: Path, base_branch: str):
+def ensure_worktree(base_repo: Path, branch: str, worktree_path: Path, base_ref: str):
     if worktree_path.exists():
         print(f"Worktree exists: {worktree_path}")
         return
 
-    existing = run("git branch --list", cwd=base_repo, check=True, capture=True).stdout
+    existing = run("git branch --list", cwd=base_repo, check=True, capture=True).stdout or ""
     if branch in existing:
         run(f'git worktree add "{worktree_path}" {branch}', cwd=base_repo)
     else:
-        run(f'git worktree add -b {branch} "{worktree_path}" {base_branch}', cwd=base_repo)
+        run(f'git worktree add -b {branch} "{worktree_path}" {base_ref}', cwd=base_repo)
 
 
 def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str):
@@ -59,14 +62,13 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
     prompt_text = prompt_text.replace("__LEGACY_ROOT__", str(legacy_root))
     prompt_text = prompt_text.replace("__TARGET_REPO__", str(base_repo))
 
-    ensure_worktree(base_repo, stage["branch"], worktree_path, base_branch)
+    base_ref = stage.get("base_from", base_branch)
+    ensure_worktree(base_repo, stage["branch"], worktree_path, base_ref)
 
     temp_prompt = worktree_path / ".night_stage_prompt.md"
     temp_prompt.write_text(prompt_text, encoding="utf-8")
 
-    stdout_text = result.stdout or ""
-    stderr_text = result.stderr or ""
-    log_file.write_text(stdout_text + "\n\nSTDERR:\n" + stderr_text, encoding="utf-8")
+    log_file = LOG_DIR / f"{stage_id}.log"
     cmd = (
         'codex exec --full-auto --sandbox workspace-write '
         '"Read AGENTS.md and the project memory files first. '
@@ -76,7 +78,13 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
 
     try:
         result = run(cmd, cwd=worktree_path, check=True, capture=True)
-        log_file.write_text(result.stdout + "\\n\\nSTDERR:\\n" + result.stderr, encoding="utf-8")
+
+        stdout_text = result.stdout or ""
+        stderr_text = result.stderr or ""
+        log_file.write_text(
+            stdout_text + "\n\nSTDERR:\n" + stderr_text,
+            encoding="utf-8"
+        )
 
         if git_has_changes(worktree_path):
             run("git add -A", cwd=worktree_path)
@@ -84,6 +92,7 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
             write_status(stage_id, "done", "Changes committed in worktree.")
         else:
             write_status(stage_id, "partial", "No file changes detected.")
+
     except subprocess.CalledProcessError as e:
         stdout_text = e.stdout or ""
         stderr_text = e.stderr or ""
@@ -111,13 +120,13 @@ def main():
     base_branch = cfg.get("base_branch", "main")
 
     for stage in stages:
-        print(f"\\n===== RUNNING STAGE {stage['id']} =====")
+        print(f"\n===== RUNNING STAGE {stage['id']} =====")
         ok = run_stage(base_repo, legacy_root, stage, base_branch)
         if not ok and not continue_on_error:
             print("Stopping pipeline due to failure.")
             break
 
-    print("\\nNight pipeline finished.")
+    print("\nNight pipeline finished.")
 
 
 if __name__ == "__main__":
