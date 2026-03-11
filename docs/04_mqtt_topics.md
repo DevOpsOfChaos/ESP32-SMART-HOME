@@ -35,6 +35,7 @@
 - `status` transportiert technische Betriebsqualitaet
 - `state` transportiert fachlichen Zustand
 - `cfg/report` ist die bestaetigte Geraetekonfiguration
+- `ack` transportiert die transiente Bestaetigung eines konkreten Kommandopfads; fuer `cmd/set` darf der Payload im aktuellen V1-Pilotpfad `request_id`, `ack_seq`, `ack_msg_type`, `status`, `attempts` und `retry_count` enthalten
 - `smarthome/server/status` wird in SQLite unter `server_settings` gespiegelt
 - unbekannte `master_id` und `node_id` werden serverseitig automatisch als Geraet angelegt
 - `display_name` startet immer mit der MQTT-ID und wird erst durch echte Metadaten ueberschrieben

@@ -29,6 +29,7 @@ Nicht diese Datei:
 | Offizieller serverseitiger Rueckweg fuer `net_erl_01` ueber Node-RED | nachgewiesen | real hardware, real lokal | `PROTOKOLL/beta12_offizieller_serverseitiger_rueckweg_nachweis_net_erl_01.txt` |
 | SQLite-Audit fuer ausgehende serverseitige `cmd/set`-Publishes | nachgewiesen | real lokal | `PROTOKOLL/beta13_cmd_set_audit_sqlite_egress.txt` |
 | Kombinierter Live-Nachweis im aktuellen Repo-Stand fuer den Pilotpfad `net_erl_01` (`Node-RED -> cmd/set -> audit_log egress -> Master -> net_erl -> MQTT state -> device_last_state`) | nachgewiesen | real hardware, real lokal | `PROTOKOLL/beta14_kombinierter_live_nachweis_offizieller_rueckweg_net_erl_01_aktueller_repo_stand.txt` |
+| ACK-/Retry-Nachweis fuer den offiziellen `net_erl_01`-`cmd/set`-Pfad (`Node-RED -> cmd/set -> Master -> net_erl -> MQTT ack`, plus kontrollierter Retry nach `net_erl`-Reset) | nachgewiesen | real hardware, real lokal | `PROTOKOLL/beta17_net_erl_01_offizieller_ack_retry_nachweis.txt` |
 | Reproduzierbarer Build-/Flash-/Seriell-Runbook | nachgewiesen | real hardware | `docs/16_build_flash_bringup_master_net_erl.md`, `PROTOKOLL/beta11_realer_retest_master_net_erl_mqtt_minimalpfad.txt` |
 
 ## Wichtige Klarstellungen
@@ -41,10 +42,11 @@ Nicht diese Datei:
 - `PROTOKOLL/beta14_kombinierter_live_nachweis_offizieller_rueckweg_net_erl_01_aktueller_repo_stand.txt` belegt den kombinierten offiziellen Live-Lauf im aktuellen Repo-Stand. Der Lauf zeigte zusaetzlich eine reale Betriebsgrenze: Ein blosses `docker compose up --build -d` kann wegen persistiertem `server_nodered_data` ein altes `/data/flows.json` weiterfahren; fuer den echten Test neuer Flow-Generator-Staende muss die persistierte Node-RED-Datenbasis sauber erneuert oder die persistierte Flow-Datei bewusst ersetzt werden.
 - `PROTOKOLL/beta15_net_zrl_realer_bringup_und_blockade_offizieller_serverpfad.txt` belegt den realen `master <-> net_zrl`-Basispfad nach einer minimalen Firmware-Korrektur im HELLO-Broadcast. Dieser Stand ist bewusst kein offizieller Servernachweis fuer `net_zrl`: In derselben Session war der lokale Docker-Desktop-Serverpfad wegen `hasNoVirtualization=true` nicht startbar, daher wurden keine `cmd/set`-, MQTT- oder SQLite-Aussagen fuer `net_zrl` nachgezogen.
 - `PROTOKOLL/beta16_net_zrl_kombinierter_live_nachweis_offizieller_serverpfad_aktueller_repo_stand.txt` belegt den offiziellen kombinierten Live-Lauf fuer `net_zrl_01` im aktuellen Repo-Stand. Dafuer wurde der versionierte Node-RED-Generator minimal um den fehlenden `net_zrl_01`-`cmd/set`-Pfad erweitert, `server_nodered_data` bewusst erneuert und danach der reale Rueckweg fuer `relay_1` und `relay_2` jeweils EIN/AUS ueber Broker, SQLite und serielle Logs belegt.
-- Die aktuell belegten kombinierten Live-Nachweise gelten fuer die engen Pilotpfade `net_erl_01` und `net_zrl_01`. Sie sind kein Gesamtprojektnachweis und belegen weder ACK/Retry noch Offline-Timeout, Langzeitstabilitaet oder weitere Basisgeraete.
+- `PROTOKOLL/beta17_net_erl_01_offizieller_ack_retry_nachweis.txt` belegt den bisher fehlenden ACK-/Retry-Nachweis fuer genau den offiziellen `net_erl_01`-`cmd/set`-Pfad. Dabei wurde ACK im Normalfall ueber `smarthome/node/net_erl_01/ack` mit `request_id`, `ack_seq` und `retry_count` real beobachtet und ein kontrollierter Retry durch unmittelbaren `net_erl`-Reset vor dem offiziellen `inject_net_erl_on`-Trigger real erzwungen.
+- Die aktuell belegten kombinierten Live-Nachweise gelten weiter nur fuer die engen Pilotpfade `net_erl_01` und `net_zrl_01`. Sie sind kein Gesamtprojektnachweis; offen bleiben weiterhin Offline-Timeout, Langzeitstabilitaet, weitere Basisgeraete und ACK-/Retry-Nachweise jenseits des jetzt belegten `net_erl_01`-Command-Pfads.
 
 ## Offene Nachweis- und Doku-Luecken
-- ACK-/Retry-Nachweis fuer Commands
+- ACK-/Retry-Nachweis fuer weitere Basisgeraete oder weitere Command-Pfade neben dem jetzt belegten `net_erl_01`-Pilotpfad
 - Offline-Timeout als reproduzierbarer offizieller Nachweis im aktuellen Repo-Stand
 - Langzeitstabilitaet ueber den kombinierten Live-Lauf hinaus
 - weitere serverseitige Rueckweg-Nachweise fuer andere Basisgeraete als `net_erl_01` und `net_zrl_01`

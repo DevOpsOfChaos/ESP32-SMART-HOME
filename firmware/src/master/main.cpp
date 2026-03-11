@@ -66,6 +66,7 @@ constexpr char DATEI_VERSION[] = "0.2.2";
 constexpr char MQTT_TOPIC_CMD_SET_SUB[] = "smarthome/node/+/cmd/set";
 constexpr char MQTT_TOPIC_CMD_GET_SUB[] = "smarthome/node/+/cmd/get";
 constexpr uint8_t WINDOW_STATE_UNKNOWN = 0xFFU;
+constexpr size_t REQUEST_ID_LEN = 96U;
 
 struct NodeDefinition {
     const char* node_id;
@@ -112,6 +113,25 @@ struct MasterState {
     uint8_t naechste_seq;
 };
 
+struct PendingCommand {
+    bool aktiv;
+    size_t node_index;
+    uint8_t seq;
+    uint8_t relay_index;
+    bool relay_state;
+    uint8_t versuche;
+    unsigned long letztes_senden_ms;
+    char request_id[REQUEST_ID_LEN];
+};
+
+struct CommandAckCache {
+    bool gueltig;
+    size_t node_index;
+    unsigned long gespeichert_ms;
+    char request_id[REQUEST_ID_LEN];
+    char ack_payload[256];
+};
+
 constexpr NodeDefinition NODE_DEFINITIONS[] = {
     {"net_erl_01", "net_erl", SH_CLASS_NET_ERL, SH_POWER_MAINS, NODE_OFFLINE_TIMEOUT_MS},
     {"net_zrl_01", "net_zrl", SH_CLASS_NET_ZRL, SH_POWER_MAINS, NODE_OFFLINE_TIMEOUT_MS},
@@ -125,6 +145,8 @@ WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 MasterState masterStatus = {};
 NodeRuntime nodeStates[NODE_COUNT] = {};
+PendingCommand pendingCommand = {};
+CommandAckCache commandAckCache = {};
 
 void logf(const char* level, const char* format, ...) {
     if (!DEBUG_LOKAL_AKTIV) return;
@@ -248,6 +270,38 @@ uint16_t holeHelloCaps(const SmartHome::HelloPayload& payload) {
     return (uint16_t)(((uint16_t)payload.caps_hi << 8) | payload.caps_lo);
 }
 
+bool nutztCommandAckPfad(size_t nodeIndex) {
+    return strcmp(NODE_DEFINITIONS[nodeIndex].node_id, "net_erl_01") == 0;
+}
+
+bool gleicheRequestId(const char* links, const char* rechts) {
+    return links != nullptr &&
+           rechts != nullptr &&
+           links[0] != '\0' &&
+           rechts[0] != '\0' &&
+           strcmp(links, rechts) == 0;
+}
+
+void pruefeCommandAckCacheAblauf() {
+    if (!commandAckCache.gueltig) return;
+
+    if ((millis() - commandAckCache.gespeichert_ms) > COMMAND_ACK_CACHE_MS) {
+        commandAckCache = {};
+    }
+}
+
+int findeNodeIndexPerMac(const uint8_t* mac) {
+    if (mac == nullptr) return -1;
+
+    for (size_t i = 0; i < NODE_COUNT; ++i) {
+        if (nodeStates[i].mac_bekannt && memcmp(nodeStates[i].mac, mac, 6) == 0) {
+            return (int)i;
+        }
+    }
+
+    return -1;
+}
+
 bool stellePeerSicher(const uint8_t* mac) {
     if (mac == nullptr || !SmartHome::isValidMac(mac)) return false;
     if (esp_now_is_peer_exist(mac)) return true;
@@ -269,13 +323,24 @@ bool stellePeerSicher(const uint8_t* mac) {
     return true;
 }
 
-bool sendePaket(const uint8_t* zielMac, uint8_t msgType, const void* payload, size_t payloadLen, const char* label) {
+bool sendePaketMitOptionen(
+    const uint8_t* zielMac,
+    uint8_t msgType,
+    const void* payload,
+    size_t payloadLen,
+    const char* label,
+    uint8_t flags,
+    bool festeSeq,
+    uint8_t seq,
+    uint8_t* verwendeteSeq)
+{
     if (zielMac == nullptr || payloadLen > SH_MAX_PAYLOAD_BYTES) return false;
     if (!stellePeerSicher(zielMac)) return false;
 
     uint8_t buffer[SH_ESPNOW_MAX_BYTES] = {0};
     SmartHome::MsgHeader header = {};
-    SmartHome::fillHeader(header, msgType, masterStatus.naechste_seq++, 0, (uint16_t)payloadLen);
+    const uint8_t effektiveSeq = festeSeq ? seq : masterStatus.naechste_seq++;
+    SmartHome::fillHeader(header, msgType, effektiveSeq, flags, (uint16_t)payloadLen);
 
     uint8_t* payloadBuffer = buffer + SH_HEADER_SIZE;
     if (payloadLen > 0U && payload != nullptr) {
@@ -294,7 +359,14 @@ bool sendePaket(const uint8_t* zielMac, uint8_t msgType, const void* payload, si
     char text[18] = {0};
     macText(zielMac, text, sizeof(text));
     logf("INFO", "%s gesendet an %s", label, text);
+    if (verwendeteSeq != nullptr) {
+        *verwendeteSeq = effektiveSeq;
+    }
     return true;
+}
+
+bool sendePaket(const uint8_t* zielMac, uint8_t msgType, const void* payload, size_t payloadLen, const char* label) {
+    return sendePaketMitOptionen(zielMac, msgType, payload, payloadLen, label, 0U, false, 0U, nullptr);
 }
 
 void baueMasterStatusJson(char* buffer, size_t bufferSize, bool online) {
@@ -516,6 +588,62 @@ void publishNodeEvent(size_t nodeIndex, const SmartHome::EventReportPayload& pay
     publishTransient(topic, json);
 }
 
+void publishNodeAckPayload(size_t nodeIndex, const char* ackPayload) {
+    if (!ackPayload || ackPayload[0] == '\0') return;
+
+    char topic[96] = {0};
+    baueNodeTopic(nodeIndex, "ack", topic, sizeof(topic));
+    publishTransient(topic, ackPayload);
+}
+
+void speichereCommandAckCache(size_t nodeIndex, const char* requestId, const char* ackPayload) {
+    if (!requestId || requestId[0] == '\0' || !ackPayload || ackPayload[0] == '\0') {
+        return;
+    }
+
+    commandAckCache = {};
+    commandAckCache.gueltig = true;
+    commandAckCache.node_index = nodeIndex;
+    commandAckCache.gespeichert_ms = millis();
+    copyText(commandAckCache.request_id, sizeof(commandAckCache.request_id), requestId);
+    copyText(commandAckCache.ack_payload, sizeof(commandAckCache.ack_payload), ackPayload);
+}
+
+void sendeCommandAckMqtt(
+    size_t nodeIndex,
+    const char* requestId,
+    const char* statusText,
+    int statusCode,
+    uint8_t ackMsgType,
+    uint8_t ackSeq,
+    uint8_t versuche,
+    const char* source,
+    bool retryExhausted,
+    bool inCacheMerken)
+{
+    char ackPayload[256] = {0};
+    const uint8_t retryCount = versuche > 0U ? (uint8_t)(versuche - 1U) : 0U;
+    snprintf(
+        ackPayload,
+        sizeof(ackPayload),
+        "{\"node_id\":\"%s\",\"request_id\":\"%s\",\"channel\":\"cmd/set\",\"status\":\"%s\",\"status_code\":%d,\"ack_msg_type\":%u,\"ack_seq\":%u,\"attempts\":%u,\"retry_count\":%u,\"retry_exhausted\":%s,\"source\":\"%s\"}",
+        NODE_DEFINITIONS[nodeIndex].node_id,
+        requestId ? requestId : "",
+        statusText ? statusText : "unknown",
+        statusCode,
+        (unsigned)ackMsgType,
+        (unsigned)ackSeq,
+        (unsigned)versuche,
+        (unsigned)retryCount,
+        retryExhausted ? "true" : "false",
+        source ? source : "master");
+
+    publishNodeAckPayload(nodeIndex, ackPayload);
+    if (inCacheMerken) {
+        speichereCommandAckCache(nodeIndex, requestId, ackPayload);
+    }
+}
+
 void publishBekannteNodesNachReconnect() {
     publishMasterStatus();
     publishMasterEvent("mqtt_connected");
@@ -556,6 +684,104 @@ void sendeHelloAck(const uint8_t* zielMac, uint8_t ackStatus) {
     payload.channel = (uint8_t)(masterStatus.wlan_verbunden ? WiFi.channel() : WLAN_KANAL);
     payload.ack_status = ackStatus;
     sendePaket(zielMac, SH_MSG_HELLO_ACK, &payload, sizeof(payload), "HELLO_ACK");
+}
+
+bool wiederholePendingCommand() {
+    if (!pendingCommand.aktiv) return false;
+
+    const size_t nodeIndex = pendingCommand.node_index;
+    if (nodeIndex >= NODE_COUNT || !nodeStates[nodeIndex].mac_bekannt) {
+        logf("WARN", "Retry verworfen: MAC fuer %s unbekannt", NODE_DEFINITIONS[nodeIndex].node_id);
+        return false;
+    }
+
+    SmartHome::CmdPayload payload = {};
+    payload.cmd_type = SH_CMD_SET_RELAY;
+    payload.param1 = pendingCommand.relay_index;
+    payload.param2 = pendingCommand.relay_state ? 1U : 0U;
+
+    const bool erfolgreich = sendePaketMitOptionen(
+        nodeStates[nodeIndex].mac,
+        SH_MSG_CMD,
+        &payload,
+        sizeof(payload),
+        "COMMAND_SET_RELAY retry",
+        (uint8_t)(SH_FLAG_ACK_REQUEST | SH_FLAG_RETRANSMIT),
+        true,
+        pendingCommand.seq,
+        nullptr);
+
+    if (erfolgreich) {
+        pendingCommand.versuche++;
+        pendingCommand.letztes_senden_ms = millis();
+        logf(
+            "WARN",
+            "Retry %u/%u fuer %s request_id=%s seq=%u",
+            (unsigned)(pendingCommand.versuche - 1U),
+            (unsigned)COMMAND_MAX_RETRIES,
+            NODE_DEFINITIONS[nodeIndex].node_id,
+            pendingCommand.request_id,
+            (unsigned)pendingCommand.seq);
+    }
+
+    return erfolgreich;
+}
+
+void verarbeiteAck(const uint8_t* senderMac, const SmartHome::AckPayload& payload) {
+    const int nodeIndex = findeNodeIndexPerMac(senderMac);
+    if (nodeIndex < 0) {
+        logf("WARN", "ACK ignoriert: unbekannte Sender-MAC");
+        return;
+    }
+
+    if (!pendingCommand.aktiv || pendingCommand.node_index != (size_t)nodeIndex) {
+        logf("WARN", "ACK ignoriert: kein offenes Kommando fuer %s", NODE_DEFINITIONS[nodeIndex].node_id);
+        return;
+    }
+
+    if (payload.ack_msg_type != SH_MSG_CMD || payload.ack_seq != pendingCommand.seq) {
+        logf(
+            "WARN",
+            "ACK ignoriert: seq/msg_type passen nicht (seq=%u, msg_type=%u)",
+            (unsigned)payload.ack_seq,
+            (unsigned)payload.ack_msg_type);
+        return;
+    }
+
+    const char* statusText = "error";
+    switch (payload.status) {
+        case SH_ACK_OK:
+            statusText = "ok";
+            break;
+        case SH_ACK_REJECTED:
+            statusText = "rejected";
+            break;
+        default:
+            statusText = "error";
+            break;
+    }
+
+    sendeCommandAckMqtt(
+        (size_t)nodeIndex,
+        pendingCommand.request_id,
+        statusText,
+        (int)payload.status,
+        payload.ack_msg_type,
+        payload.ack_seq,
+        pendingCommand.versuche,
+        "node_ack",
+        false,
+        true);
+
+    logf(
+        "INFO",
+        "ACK von %s fuer request_id=%s seq=%u status=%u",
+        NODE_DEFINITIONS[nodeIndex].node_id,
+        pendingCommand.request_id,
+        (unsigned)payload.ack_seq,
+        (unsigned)payload.status);
+
+    pendingCommand = {};
 }
 
 bool skipWhitespace(const char*& cursor) {
@@ -815,6 +1041,12 @@ void verarbeiteEspNowPaket(const uint8_t* senderMac, const uint8_t* daten, int l
             }
             break;
 
+        case SH_MSG_ACK:
+            if (header->payload_len == sizeof(SmartHome::AckPayload)) {
+                verarbeiteAck(senderMac, *reinterpret_cast<const SmartHome::AckPayload*>(payload));
+            }
+            break;
+
         default:
             logf("WARN", "ESP-NOW Nachricht ignoriert (msg_type=%u)", header->msg_type);
             break;
@@ -853,7 +1085,7 @@ bool sendeStateRequest(size_t nodeIndex) {
     return sendePaket(nodeStates[nodeIndex].mac, SH_MSG_CMD, &payload, sizeof(payload), "STATE_REQUEST");
 }
 
-bool sendeRelayCommand(size_t nodeIndex, uint8_t relayIndex, bool relayState) {
+bool sendeRelayCommand(size_t nodeIndex, uint8_t relayIndex, bool relayState, const char* requestId) {
     if (!nodeStates[nodeIndex].mac_bekannt) {
         logf("WARN", "COMMAND_SET_RELAY verworfen: MAC fuer %s unbekannt", NODE_DEFINITIONS[nodeIndex].node_id);
         return false;
@@ -863,7 +1095,37 @@ bool sendeRelayCommand(size_t nodeIndex, uint8_t relayIndex, bool relayState) {
     payload.cmd_type = SH_CMD_SET_RELAY;
     payload.param1 = relayIndex;
     payload.param2 = relayState ? 1U : 0U;
-    return sendePaket(nodeStates[nodeIndex].mac, SH_MSG_CMD, &payload, sizeof(payload), "COMMAND_SET_RELAY");
+
+    if (!nutztCommandAckPfad(nodeIndex)) {
+        return sendePaket(nodeStates[nodeIndex].mac, SH_MSG_CMD, &payload, sizeof(payload), "COMMAND_SET_RELAY");
+    }
+
+    uint8_t seq = 0U;
+    const bool erfolgreich = sendePaketMitOptionen(
+        nodeStates[nodeIndex].mac,
+        SH_MSG_CMD,
+        &payload,
+        sizeof(payload),
+        "COMMAND_SET_RELAY",
+        SH_FLAG_ACK_REQUEST,
+        false,
+        0U,
+        &seq);
+
+    if (!erfolgreich) {
+        return false;
+    }
+
+    pendingCommand = {};
+    pendingCommand.aktiv = true;
+    pendingCommand.node_index = nodeIndex;
+    pendingCommand.seq = seq;
+    pendingCommand.relay_index = relayIndex;
+    pendingCommand.relay_state = relayState;
+    pendingCommand.versuche = 1U;
+    pendingCommand.letztes_senden_ms = millis();
+    copyText(pendingCommand.request_id, sizeof(pendingCommand.request_id), requestId);
+    return true;
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
@@ -912,15 +1174,55 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         return;
     }
 
+    char requestId[REQUEST_ID_LEN] = {0};
+    const bool ackPfadAktiv = nutztCommandAckPfad((size_t)nodeIndex);
+    if (ackPfadAktiv) {
+        if (!jsonHoleString(json, "request_id", requestId, sizeof(requestId))) {
+            snprintf(requestId, sizeof(requestId), "master_%s_%lu", nodeId, millis());
+            logf("WARN", "MQTT cmd/set ohne request_id fuer %s, fallback=%s", nodeId, requestId);
+        }
+
+        pruefeCommandAckCacheAblauf();
+
+        if (pendingCommand.aktiv && pendingCommand.node_index == (size_t)nodeIndex) {
+            if (gleicheRequestId(pendingCommand.request_id, requestId)) {
+                logf("WARN", "Duplikat request_id waehrend Pending ignoriert: %s", requestId);
+                return;
+            }
+
+            sendeCommandAckMqtt(
+                (size_t)nodeIndex,
+                requestId,
+                "busy",
+                -2,
+                SH_MSG_CMD,
+                pendingCommand.seq,
+                pendingCommand.versuche,
+                "master_busy",
+                false,
+                false);
+            logf("WARN", "Neues Kommando fuer %s verworfen, solange request_id=%s offen ist", nodeId, pendingCommand.request_id);
+            return;
+        }
+
+        if (commandAckCache.gueltig &&
+            commandAckCache.node_index == (size_t)nodeIndex &&
+            gleicheRequestId(commandAckCache.request_id, requestId)) {
+            publishNodeAckPayload((size_t)nodeIndex, commandAckCache.ack_payload);
+            logf("INFO", "Duplikat request_id erkannt, cached ACK erneut publiziert: %s", requestId);
+            return;
+        }
+    }
+
     bool relayState = false;
     if (jsonHoleBool(json, "relay_1", &relayState)) {
-        sendeRelayCommand((size_t)nodeIndex, 0U, relayState);
+        sendeRelayCommand((size_t)nodeIndex, 0U, relayState, requestId);
         return;
     }
 
     if (NODE_DEFINITIONS[nodeIndex].device_class == SH_CLASS_NET_ZRL &&
         jsonHoleBool(json, "relay_2", &relayState)) {
-        sendeRelayCommand((size_t)nodeIndex, 1U, relayState);
+        sendeRelayCommand((size_t)nodeIndex, 1U, relayState, requestId);
         return;
     }
 
@@ -1042,6 +1344,44 @@ void pruefeMqttVerbindung() {
     publishBekannteNodesNachReconnect();
 }
 
+void pruefeCommandAckTimeout() {
+    pruefeCommandAckCacheAblauf();
+
+    if (!pendingCommand.aktiv) return;
+
+    if ((millis() - pendingCommand.letztes_senden_ms) < COMMAND_ACK_TIMEOUT_MS) {
+        return;
+    }
+
+    if ((pendingCommand.versuche - 1U) < COMMAND_MAX_RETRIES) {
+        if (wiederholePendingCommand()) {
+            return;
+        }
+    }
+
+    sendeCommandAckMqtt(
+        pendingCommand.node_index,
+        pendingCommand.request_id,
+        "timeout",
+        (int)SH_ERROR_ACK_TIMEOUT,
+        SH_MSG_CMD,
+        pendingCommand.seq,
+        pendingCommand.versuche,
+        "master_retry_timeout",
+        true,
+        true);
+
+    logf(
+        "WARN",
+        "ACK Timeout fuer %s request_id=%s seq=%u nach %u Versuchen",
+        NODE_DEFINITIONS[pendingCommand.node_index].node_id,
+        pendingCommand.request_id,
+        (unsigned)pendingCommand.seq,
+        (unsigned)pendingCommand.versuche);
+
+    pendingCommand = {};
+}
+
 void pruefeOfflineTimeout() {
     for (size_t i = 0; i < NODE_COUNT; ++i) {
         if (!nodeStates[i].online) continue;
@@ -1096,6 +1436,7 @@ void setup() {
 void loop() {
     pruefeWlanVerbindung();
     pruefeMqttVerbindung();
+    pruefeCommandAckTimeout();
     pruefeOfflineTimeout();
     delay(LOOP_INTERVAL_MS);
 }

@@ -1,0 +1,126 @@
+Stand: beta17
+Datei: beta17_net_erl_01_offizieller_ack_retry_nachweis.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Fuer den offiziellen `net_erl_01`-Command-Pfad war bisher nur der Rueckweg bis `state` belastbar belegt. ACK und Retry waren im Protokoll zwar vorgesehen, im realen Lauf aber nicht nachgewiesen.
+- Die Aufgabe war eng: kein neues Geraet, keine neue Architektur, kein generischer Multi-Device-Baukasten. Es sollte nur der offizielle `net_erl_01`-Pfad ehrlich vervollstaendigt werden.
+
+2. Ist-Stand vor der Aenderung
+- MQTT-Vertrag und Serverpfad hatten bereits das Topic `smarthome/node/<node_id>/ack`; Node-RED und SQLite fuehrten `ack` getrennt von `state` und `event`.
+- `Protocol.h` definierte bereits `SH_MSG_ACK`, `seq`, `SH_FLAG_ACK_REQUEST`, `SH_FLAG_RETRANSMIT`, `SH_CFG_ACK_TIMEOUT_MS` und `SH_CFG_MAX_RETRIES`.
+- Im real laufenden `master`-/`net_erl`-Code wurden diese Elemente fuer `cmd/set` aber nicht genutzt:
+  - `master` inkrementierte zwar `seq`, behielt sie fuer Commands aber nicht nach und publizierte kein MQTT-ACK.
+  - `net_erl` konnte nur `HELLO_ACK`, kein `SH_MSG_ACK`.
+  - `request_id` blieb rein im MQTT-/SQLite-Pfad und wurde nicht mit der Funkbestaetigung verknuepft.
+  - Es gab keine Duplikaterkennung fuer wiederholte Commands und keinen Retry auf fehlende Command-Bestaetigung.
+- Der einzige ack-nahe Mechanismus im Laufzeitcode war `HELLO_ACK` fuer die Anmeldung, nicht fuer `cmd/set`.
+
+3. Aenderung
+- `firmware/src/master/main.cpp` wurde minimal fuer genau den offiziellen `net_erl_01`-`cmd/set`-Pfad erweitert:
+  - `request_id` aus dem MQTT-Command wird mit dem offenen Funk-Command verknuepft.
+  - der Funk-Command an `net_erl_01` setzt jetzt `SH_FLAG_ACK_REQUEST`
+  - eingehende `SH_MSG_ACK` vom Node werden ausgewertet
+  - der Master publiziert den bestaetigenden Rueckkanal auf dem bereits vertraglich vorgesehenen Topic `smarthome/node/net_erl_01/ack`
+  - ACK-Payload bleibt bewusst schlank und technisch: `request_id`, `ack_seq`, `ack_msg_type`, `status`, `attempts`, `retry_count`, `retry_exhausted`, `source`
+  - fuer genau diesen Pilotpfad gibt es ein kleines Retry-Fenster (`COMMAND_ACK_TIMEOUT_MS = 800`, `COMMAND_MAX_RETRIES = 3`)
+  - derselbe `request_id` wird nach erfolgreicher Bestaetigung serverseitig erkannt und nur mit gecachtem ACK beantwortet statt erneut an `net_erl` gesendet
+- `firmware/src/net_erl/main.cpp` wurde minimal erweitert:
+  - `SH_MSG_CMD` mit `SH_FLAG_ACK_REQUEST` wird nach Verarbeitung mit `SH_MSG_ACK` quittiert
+  - derselbe retransmittierte Command (`seq` + identischer CMD-Payload) wird erkannt und nicht doppelt verarbeitet
+- `firmware/src/master/AppConfig.h` bekam nur die direkten ACK-/Retry-Konstanten fuer diesen Pfad.
+- Keine neuen MQTT-Topics, keine Serverarchitekturaenderung, keine Zusatzlogik fuer `net_zrl`, `net_sen` oder `bat_sen`.
+
+4. Begruendung
+- Das Repo hatte den ACK-Kanal, das ACK-Paket und die Sequenznummer bereits im Vertrag. Die Luecke lag im Laufzeitpfad, nicht in fehlender Architektur.
+- Ein neues Topic oder ein neues Tabellenmodell waere Ausweichen statt Loesen gewesen.
+- Die `request_id`-Kopplung musste im Master passieren, weil nur dort beide Welten gleichzeitig sichtbar sind: MQTT-Command und ESP-NOW-ACK.
+- Retry wurde bewusst klein gehalten: nur fuer `net_erl_01`, nur fuer `cmd/set`, nur mit wenigen festen Retries und ohne Queue-System.
+
+5. Verbesserungseffekt
+- Der offizielle `Node-RED -> cmd/set -> Master -> net_erl_01`-Pfad liefert jetzt einen realen, semantisch getrennten ACK-Rueckkanal auf `smarthome/node/net_erl_01/ack`.
+- ACK ist serverseitig sauber sichtbar:
+  - transient auf MQTT
+  - als `channel = ack`, `direction = ingest` in `audit_log`
+  - als `ack_json` getrennt von `state_json` in `device_last_state`
+- Retry ist fuer diesen Pilotpfad jetzt klar definiert und real beobachtbar:
+  - Timeout auf offene Funk-Bestaetigung
+  - Retransmit mit identischer `seq` und `SH_FLAG_RETRANSMIT`
+  - ACK mit `attempts` und `retry_count`
+- Ein wiederholter identischer `request_id` fuehrt fuer diesen Pfad nicht mehr zu einer zweiten Funkwirkung.
+
+6. Risiken / Trade-offs
+- ACK-/Retry bleibt bewusst nur auf dem offiziellen `net_erl_01`-`cmd/set`-Pilotpfad aktiviert. Fuer andere Geraete wird hier nichts behauptet.
+- Es gibt kein generisches Command-Queueing. Fuer den ACK-verfolgten `net_erl_01`-Pfad ist immer nur genau ein offenes `cmd/set` gleichzeitig vorgesehen; konkurrierende neue Requests werden als `busy` abgewiesen.
+- Der kontrollierte Retry-Nachweis wurde ueber einen unmittelbaren USB-Reset von `net_erl` vor dem offiziellen Trigger erzwungen. Das belegt den Retry-Pfad real, ist aber kein allgemeiner Funkstoerungs- oder Langzeittest.
+- Die Duplikatpruefung mit identischer `request_id` wurde serverseitig direkt auf das offizielle MQTT-Topic publiziert, weil der versionierte Node-RED-Inject-Pfad absichtlich bei jedem Lauf eine neue `request_id` erzeugt.
+
+7. Teststatus
+- Reale Builds:
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e net_erl`
+- Reale Uploads:
+  - `master -> COM3`, Hardware-MAC `20:6E:F1:6D:92:C0`
+  - `net_erl -> COM10`, Hardware-MAC `20:6E:F1:6B:6B:30`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master -t upload --upload-port COM3`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e net_erl -t upload --upload-port COM10`
+- Reale Serverbasis waehrend des Nachweises:
+  - `server-mosquitto-1`, `server-nodered-1`, `server-influxdb-1` gesund
+  - `docker compose exec nodered sh -lc "test -s /data/flows.json && test -s /data/sqlite/smarthome.sqlite"`
+
+### 7.1 Normaler offizieller ACK-Lauf
+- Reale Trigger:
+  - `POST http://127.0.0.1:1880/inject/inject_net_erl_on` -> HTTP `200`
+  - `POST http://127.0.0.1:1880/inject/inject_net_erl_off` -> HTTP `200`
+- Reale MQTT-Beobachtung:
+  - `2026-03-11T13:57:13+0000|smarthome/node/net_erl_01/cmd/set|{"cmd":"set_relay","relay_1":true,"request_id":"nodered_net_erl_01_on_1773237433448"}`
+  - `2026-03-11T13:57:13+0000|smarthome/node/net_erl_01/ack|{"node_id":"net_erl_01","request_id":"nodered_net_erl_01_on_1773237433448","channel":"cmd/set","status":"ok","status_code":0,"ack_msg_type":5,"ack_seq":1,"attempts":1,"retry_count":0,"retry_exhausted":false,"source":"node_ack"}`
+  - `2026-03-11T13:57:13+0000|smarthome/node/net_erl_01/state|{"node_id":"net_erl_01","relay_1":true,"fault":false}`
+  - analog erneut fuer `off`
+- Reale serielle Kernaussagen:
+  - `master`: `MQTT empfangen ... cmd/set`, `COMMAND_SET_RELAY gesendet`, `ACK von net_erl_01 ... status=0`, danach `STATE_REPORT von net_erl_01 verarbeitet`
+  - `net_erl`: `COMMAND_SET_RELAY empfangen`, `Relais physisch EIN/AUS`, `ACK gesendet`, danach `STATE_REPORT gesendet`
+- Reale SQLite-Belege:
+  - `audit_log`: `cmd/set` als `direction = egress`, `ack` als `direction = ingest`, `state` als `direction = ingest`
+  - `device_last_state`: `ack_json` gefuellt, getrennt von `state_json`
+
+### 7.2 Kontrollierter Retry-Lauf ueber offiziellen Trigger
+- Methode:
+  - `net_erl` wurde per USB-Seriell-Reset unmittelbar vor `POST /inject/inject_net_erl_on` kurz aus dem Funkpfad genommen.
+- Reale MQTT-Beobachtung:
+  - `2026-03-11T13:59:57+0000|smarthome/node/net_erl_01/cmd/set|{"cmd":"set_relay","relay_1":true,"request_id":"nodered_net_erl_01_on_1773237597271"}`
+  - `2026-03-11T13:59:58+0000|smarthome/node/net_erl_01/ack|{"node_id":"net_erl_01","request_id":"nodered_net_erl_01_on_1773237597271","channel":"cmd/set","status":"ok","status_code":0,"ack_msg_type":5,"ack_seq":6,"attempts":2,"retry_count":1,"retry_exhausted":false,"source":"node_ack"}`
+  - `2026-03-11T13:59:58+0000|smarthome/node/net_erl_01/state|{"node_id":"net_erl_01","relay_1":true,"fault":false}`
+- Reale Master-Logs:
+  - erster Sendestatus: `ESP-NOW Sendestatus ... FEHLER`
+  - danach `COMMAND_SET_RELAY retry gesendet`
+  - `Retry 1/3 fuer net_erl_01 request_id=nodered_net_erl_01_on_1773237597271 seq=6`
+  - anschliessend `ACK von net_erl_01 ... seq=6 status=0`
+- Reale net_erl-Logs:
+  - nach HELLO/STATE-Neuanmeldung `COMMAND_SET_RELAY empfangen: relay_1=true (retry)`
+  - `ACK gesendet`
+  - `STATE_REPORT gesendet`
+- Reale SQLite-Beobachtung:
+  - `ack`-Payload mit `attempts = 2`, `retry_count = 1`
+  - `state_json` danach real auf `relay_1:true`
+
+### 7.3 Duplikatpruefung fuer identische `request_id`
+- Kontrollierter serverseitiger Publish direkt auf `smarthome/node/net_erl_01/cmd/set`, zweimal mit identischem Payload:
+  - `{"cmd":"set_relay","relay_1":false,"request_id":"dup_net_erl_off_1773237655375"}`
+- Reale MQTT-Beobachtung:
+  - zwei identische `cmd/set`-Publishes
+  - zwei identische `ack`-Publishes
+  - genau ein `state`-Uebergang auf `relay_1:false`
+- Reale Master-Logs:
+  - erster Publish: `COMMAND_SET_RELAY gesendet`, ACK empfangen, `STATE_REPORT ... verarbeitet`
+  - zweiter Publish: `Duplikat request_id erkannt, cached ACK erneut publiziert`
+  - kein zweites `COMMAND_SET_RELAY gesendet`
+- Reale net_erl-Logs:
+  - genau ein `COMMAND_SET_RELAY empfangen: relay_1=false`
+  - kein zweiter physischer Schaltlauf
+
+8. Lehrerblick
+- Die Eigenleistung steckt hier nicht in einer neuen Architektur, sondern im Schliessen einer konkreten Wahrheitluecke: vorhandenes ACK-Protokoll konsequent an den echten `net_erl_01`-Pfad angehaengt, `request_id` und `seq` sauber zusammengefuehrt, Retry klein gehalten und dann real gegen Hardware, Broker, SQLite und serielle Logs nachgewiesen.
+- Als Referenz genutzt wurden nur der bestehende MQTT-Vertrag, `Protocol.h`, die vorhandene `net_erl`-/`master`-Firmwarebasis und der bereits belegte offizielle Rueckweg. Es wurde kein Altbestand reaktiviert und kein neues Topic erfunden.
+- Fachlich nachvollziehbar ist der Stand, weil der Nachweis nicht nur auf positiver Happy-Path-Ausgabe beruht, sondern zusaetzlich einen kontrollierten Retry-Fall und eine echte Duplikatpruefung mit identischer `request_id` zeigt.

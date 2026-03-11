@@ -36,6 +36,12 @@ constexpr int  WLAN_KANAL = 6;
 constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 
+// ACK-/Retry-Nachweis bleibt im aktuellen Stand bewusst eng
+// auf den offiziellen net_erl_01-cmd/set-Pilotpfad begrenzt.
+constexpr unsigned long COMMAND_ACK_TIMEOUT_MS = 800UL;
+constexpr uint8_t COMMAND_MAX_RETRIES = 3U;
+constexpr unsigned long COMMAND_ACK_CACHE_MS = 30000UL;
+
 // Node gilt nach ausbleibenden HEARTBEATs als offline.
 constexpr unsigned long NODE_OFFLINE_TIMEOUT_MS = 15000UL;
 constexpr unsigned long BATTERY_NODE_OFFLINE_TIMEOUT_MS = 900000UL;
