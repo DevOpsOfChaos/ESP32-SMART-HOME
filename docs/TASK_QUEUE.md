@@ -1,8 +1,8 @@
 # TASK_QUEUE
 
 ## Prioritaet jetzt
-1. Langzeitstabilitaet fuer `master <-> net_erl_01` real nachweisen
-2. ACK-/Retry-Verhalten fuer einen weiteren offiziellen Basisgeraete-Pfad neben dem belegten `net_erl_01`-Pilotpfad belastbar nachweisen
+1. ACK-/Retry-Verhalten fuer einen weiteren offiziellen Basisgeraete-Pfad neben dem belegten `net_erl_01`-Pilotpfad belastbar nachweisen
+2. Langzeitstabilitaet fuer einen weiteren offiziellen Pfad neben `master <-> net_erl_01` real nachweisen
 3. Reale Hardware-Nachweise fuer `net_sen` und `bat_sen` aufbauen
 4. Hardware-README-Dateien der Basisgeraete von Platzhaltern auf reale Mindestinformationen heben
 
