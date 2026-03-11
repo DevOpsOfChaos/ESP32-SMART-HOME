@@ -1,0 +1,108 @@
+Stand: beta18
+Datei: beta18_offizieller_offline_timeout_nachweis_master_net_erl_01.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Der Offline-Timeout fuer `master <-> net_erl_01` war im aktuellen Repo-Stand ausdruecklich noch offen.
+- Belegt waren bereits Bring-up, offizieller serverseitiger Rueckweg und ACK-/Retry fuer den `net_erl_01`-Pilotpfad. Es fehlte der reale Nachweis, dass der Master ausbleibende Lebenszeichen korrekt in einen sichtbaren Offline-Status ueberfuehrt.
+
+2. Aenderung
+- Keine Firmware-, Server-, Topic- oder Architektur-Aenderung.
+- Der aktuelle Repo-Stand wurde real gebaut und geflasht:
+  - `platformio.exe run -e master`
+  - `platformio.exe run -e net_erl`
+  - `platformio.exe run -e master -t upload --upload-port COM3`
+  - `platformio.exe run -e net_erl -t upload --upload-port COM10`
+- Der laufende Server-Stack wurde vor dem Nachweis gegen den versionierten Flow-Generator verifiziert:
+  - `docker compose exec nodered sh -lc 'node /opt/smarthome/build-flows.js > /tmp/expected_flows.json && cmp -s /tmp/expected_flows.json /data/flows.json; status=$?; rm -f /tmp/expected_flows.json; exit $status'`
+- Vor dem Ausfall wurde `relay_1` bewusst ueber den offiziellen Node-RED-Pfad auf `true` gesetzt:
+  - `POST http://127.0.0.1:1880/inject/inject_net_erl_on`
+- Fuer den eigentlichen Ausfall wurde `net_erl_01` kontrolliert und real in den ESP32-C3-ROM-Bootloader versetzt und dort gehalten:
+  - `python.exe ...\\esptool.py --chip esp32c3 --port COM10 --before default_reset --after no_reset chip_id`
+- Wiederkehr danach:
+  - `python.exe ...\\esptool.py --chip esp32c3 --port COM10 chip_id`
+
+3. Begruendung
+- Der Master erklaert einen Node nicht wegen MQTT oder Servermagie offline, sondern nur wegen ausbleibendem Kontakt auf dem Funkpfad.
+- Ein echter Nachweis braucht deshalb einen realen Ausfall des Node-Laufzeitpfads, nicht nur eine gedankliche Simulation.
+- Der Bootloader-Hold ist hier eine reale definierte Trennung des Node-Anwendungsbetriebs: `net_erl_01` lief in dieser Phase nicht mehr als ESP-NOW-Node, HEARTBEATs blieben aus, und der Master musste allein mit seinem Timeout reagieren.
+
+4. Verbesserungseffekt
+- Der bisher offene Offline-Timeout fuer `master <-> net_erl_01` ist jetzt im aktuellen Repo-Stand real nachgewiesen.
+- Der Offline-Umschlag ist auf dem vertraglichen Pfad sichtbar:
+  - MQTT `smarthome/node/net_erl_01/status`
+  - SQLite `audit_log` als `channel = status`, `direction = ingest`
+  - SQLite `device_last_state.status_json`
+- `status` und `state` bleiben dabei semantisch sauber getrennt:
+  - mitten im Offline-Fenster zeigte `status_json` bereits `online:false`
+  - `state_json` blieb gleichzeitig auf dem letzten fachlichen Zustand `relay_1:true`
+  - erst nach der realen Wiederkehr und dem neuen `STATE_REPORT` wurde `state_json` wieder auf `relay_1:false` aktualisiert
+
+5. Risiken / Trade-offs
+- Der kontrollierte Ausfall war kein manueller Spannungsentzug, sondern ein hostseitig erzwungener ROM-Bootloader-Hold ueber die serielle Reset-Sequenz.
+- Das ist fuer diesen Nachweis fachlich zulaessig, weil die Anwendung auf `net_erl_01` real nicht mehr lief und der Master nur das Ausbleiben von HELLO/HEARTBEAT/STATE sah.
+- Daraus folgt kein Langzeit- oder Funkstoerungsnachweis. Belegt ist nur der enge Offline-/Wieder-online-Pfad fuer `net_erl_01`.
+
+6. Teststatus
+- Reale Hardware und Ports:
+  - `master -> COM3`, MAC `20:6E:F1:6D:92:C0`
+  - `net_erl -> COM10`, MAC `20:6E:F1:6B:6B:30`
+- Reale Baseline vor dem offiziellen Lauf:
+  - `docker compose ps`: `server-mosquitto-1`, `server-nodered-1`, `server-influxdb-1` gesund
+  - `audit_log MAX(id) = 165`
+  - `device_last_state` vor Ausfall:
+    - `status_json = {"node_id":"net_erl_01","online":true,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `state_json = {"node_id":"net_erl_01","relay_1":true,"fault":false}`
+    - `state_at = 2026-03-11T14:23:43.368Z`
+  - MQTT vor Ausfall:
+    - `2026-03-11T14:24:10+0000|smarthome/node/net_erl_01/status|{"node_id":"net_erl_01","online":true,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `2026-03-11T14:24:10+0000|smarthome/node/net_erl_01/state|{"node_id":"net_erl_01","relay_1":true,"fault":false}`
+- Reale letzte Aktivitaet vor dem Ausfall:
+  - Master-Serial:
+    - `2026-03-11T14:24:11.1580953Z|[INFO] HEARTBEAT von net_erl_01 (uptime=105s)`
+    - `2026-03-11T14:24:16.1529961Z|[INFO] HEARTBEAT von net_erl_01 (uptime=110s)`
+  - Bootloader-Hold ausgeloest:
+    - `STEP|2026-03-11T14:24:18.0927038Z|enter_bootloader`
+    - `STEP|2026-03-11T14:24:21.8926902Z|bootloader_hold`
+- Reale Offline-Beobachtung:
+  - Master-Serial:
+    - `2026-03-11T14:24:31.1610260Z|[INFO] MQTT retained smarthome/node/net_erl_01/status -> {"node_id":"net_erl_01","online":false,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `2026-03-11T14:24:31.1614167Z|[WARN] Node net_erl_01 nach Timeout offline`
+  - MQTT:
+    - `2026-03-11T14:24:31+0000|smarthome/node/net_erl_01/status|{"node_id":"net_erl_01","online":false,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+  - SQLite mitten im Offline-Fenster:
+    - `status_json = {"node_id":"net_erl_01","online":false,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `status_at = 2026-03-11T14:24:31.163Z`
+    - `state_json = {"node_id":"net_erl_01","relay_1":true,"fault":false}`
+    - `state_at = 2026-03-11T14:23:43.368Z`
+    - `audit_log` enthielt in dieser Phase genau den neuen Status-Eintrag:
+      - `166|smarthome/node/net_erl_01/status|status|ingest|2026-03-11T14:24:31.163Z|{"node_id":"net_erl_01","online":false,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+- Reale Wiederkehr:
+  - Recovery ausgeloest:
+    - `STEP|2026-03-11T14:24:46.8928755Z|recover`
+    - `STEP|2026-03-11T14:24:50.6859048Z|done`
+  - Master-Serial:
+    - `2026-03-11T14:24:51.0101643Z|[INFO] MQTT retained smarthome/node/net_erl_01/status -> {"node_id":"net_erl_01","online":true,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `2026-03-11T14:24:51.0104152Z|[INFO] Node net_erl_01 ist online`
+    - `2026-03-11T14:24:51.0141074Z|[INFO] HELLO von net_erl_01 (NET-ERL Pilot)`
+    - `2026-03-11T14:24:51.0194205Z|[INFO] MQTT retained smarthome/node/net_erl_01/state -> {"node_id":"net_erl_01","relay_1":false,"fault":false}`
+    - `2026-03-11T14:24:51.0197848Z|[INFO] STATE_REPORT von net_erl_01 verarbeitet`
+  - MQTT:
+    - `2026-03-11T14:24:51+0000|smarthome/node/net_erl_01/status|{"node_id":"net_erl_01","online":true,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+    - `2026-03-11T14:24:51+0000|smarthome/node/net_erl_01/state|{"node_id":"net_erl_01","relay_1":false,"fault":false}`
+  - SQLite nach Wiederkehr:
+    - `167|.../status|status|ingest|2026-03-11T14:24:51.017Z|online:true`
+    - `168|.../meta|meta|ingest|2026-03-11T14:24:51.068Z|...`
+    - `169|.../state|state|ingest|2026-03-11T14:24:51.070Z|{"node_id":"net_erl_01","relay_1":false,"fault":false}`
+    - `170|.../status|status|ingest|2026-03-11T14:24:51.069Z|online:true`
+    - `device_last_state` Endstand:
+      - `status_json = {"node_id":"net_erl_01","online":true,"device_type":"net_erl","power_type":"mains","fw":"0.2.2"}`
+      - `status_at = 2026-03-11T14:24:51.069Z`
+      - `state_json = {"node_id":"net_erl_01","relay_1":false,"fault":false}`
+      - `state_at = 2026-03-11T14:24:51.070Z`
+
+7. Lehrerblick
+- Die Eigenleistung steckt hier nicht in einer neuen Funktion, sondern im sauberen Realnachweis eines bisher offenen Verhaltens: aktuelles Repo gebaut und geflasht, laufenden Serverstand gegen den versionierten Generator geprueft, einen echten Node-Ausfall kontrolliert erzeugt und die Wirkung auf Master, MQTT und SQLite mit Zeitbezug belegt.
+- Als Referenz genutzt wurden nur die vorhandene Firmware-, Server- und Doku-Basis des aktuellen Repos.
+- Fachlich nachvollziehbar ist der Stand, weil Ausfallmethode, Ports, MACs, Triggerzeiten, MQTT-Nachrichten, Master-Logs und SQLite-Zeilen konkret benannt sind und `status`/`state` mitten im Offline-Fenster getrennt sichtbar bleiben.
