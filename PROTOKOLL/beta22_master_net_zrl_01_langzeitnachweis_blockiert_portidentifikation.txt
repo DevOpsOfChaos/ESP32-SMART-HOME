@@ -1,0 +1,134 @@
+Stand: beta22
+Datei: beta22_master_net_zrl_01_langzeitnachweis_blockiert_portidentifikation.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Der offene Langzeitstabilitaets-Nachweis fuer den offiziellen Pilotpfad `master <-> net_zrl_01` sollte im aktuellen Repo-Stand real gefahren werden.
+- Der erste reale Befund war hart und unromantisch:
+  - `master` blieb korrekt auf `COM3`
+  - der einzige weitere aktive ESP32-USB-Port war `COM5`
+  - `COM5` bootete nicht als `net_zrl`, sondern mit fremder Firmware `SIM_BAT_FAKE_ALL v2.0`
+- Danach kam eine ausdrueckliche Nutzerentscheidung: Die Simulations-Firmware auf `COM5` darf bewusst ueberschrieben werden. Damit wurde `COM5` nicht mehr als zuvor identifizierter `net_zrl_01` behandelt, sondern als absichtlich umgewidmetes Testgeraet.
+
+2. Aenderung
+- Keine Architektur-, Topic-, Flow- oder Schema-Aenderung.
+- Keine Master-Firmware-Aenderung und kein Flash auf `COM3`.
+- Reale Build-Pruefungen:
+  - `platformio run -e master`
+  - `platformio run -e net_zrl`
+- Reale Server-Pruefungen:
+  - `docker compose ps` -> `mosquitto`, `influxdb`, `nodered` healthy
+  - laufendes `/data/flows.json` bytegleich zum aktuellen `server/nodered/build-flows.js`
+- Reale Umwidmung des bisherigen Simulationsgeraets auf `COM5`:
+  - `platformio run -e net_zrl -t upload --upload-port COM5`
+  - Chip-MAC `8C:D0:B2:A8:B0:89`
+- Reales Bring-up danach:
+  - `COM5` bootet als `NET-ZRL v0.2.2`, `Node-ID: net_zrl_01`
+  - `master` auf `COM3` zieht `net_zrl_01` online, sendet `HELLO_ACK` und verarbeitet `STATE_REPORT`
+- Reeller Langzeittest ueber den offiziellen Serverpfad:
+  - geplante Dauer: `52 Minuten`
+  - offizielle Node-RED-Schaltvorgaenge: `8`
+  - Verteilung:
+    - `+05 min` `relay_1 ON`
+    - `+11 min` `relay_2 ON`
+    - `+17 min` `relay_1 OFF`
+    - `+23 min` `relay_2 OFF`
+    - `+31 min` `relay_2 ON`
+    - `+37 min` `relay_1 ON`
+    - `+43 min` `relay_2 OFF`
+    - `+49 min` `relay_1 OFF`
+
+3. Begruendung
+- Blindes Flashen auf `COM5` waere vor der Nutzerfreigabe unzulaessig gewesen. Nach der ausdruecklichen Freigabe war die Lage fachlich anders: `COM5` wurde nicht mehr "erraten", sondern bewusst zum Testknoten gemacht.
+- Das musste trotzdem sauber ausgesprochen werden, weil sonst aus einem absichtlich umgewidmeten Testgeraet stillschweigend ein angeblich von Anfang an identifizierter `net_zrl_01` geworden waere. Das waere eine Luege.
+- Der Langzeittest wurde erst nach realem Bring-up, gesundem Server-Stack und aktuellem Node-RED-Flow-Stand gestartet.
+
+4. Verbesserungseffekt
+- `master <-> net_zrl_01` ist jetzt im aktuellen Repo-Stand auch als Langzeitpfad real belegt.
+- Der offizielle Serverpfad blieb ueber die Laufzeit funktionsfaehig:
+  - `8 x cmd/set` ueber Node-RED-Inject
+  - `8 x ack`
+  - konsistente `state`-Ruecklaeufe fuer beide Relais und Kombinationszustaende
+- SQLite blieb semantisch sauber:
+  - `cmd/set` nur `direction = egress`
+  - `ack` nur `direction = ingest`
+  - `state` nur `direction = ingest`
+  - `status_json`, `state_json` und `ack_json` blieben getrennt
+- Die reale Port-/Bring-up-Grenze ist ebenfalls sauber festgehalten:
+  - vor dem Flash war `COM5` ein anderes Geraet
+  - fuer den Nachweis wurde es bewusst zu `net_zrl_01` umgewidmet
+  - diese Abweichung wird nicht versteckt, sondern genannt
+
+5. Risiken / Trade-offs
+- Die serielle Dauerbeobachtung auf `COM3` und `COM5` loeste zu Beginn reale `USB_UART_CHIP_RESET`-Resets aus. Dadurch entstand am Start eine kontrollierte Offline/Online-Umschaltung fuer `net_zrl_01`.
+- Diese Startphase wird nicht als "Phantom-Offline" verkauft, sondern als von der Beobachtungsmethode verursachte Stabilisationsphase benannt.
+- Die belastbare Langzeitaussage gilt deshalb fuer das stabile Fenster nach der Wieder-online-Meldung um `2026-03-11T19:00:05.942+01:00` bis zum Testende um `2026-03-11T19:52:05.111+01:00`, also ca. `51 Minuten 59 Sekunden`.
+- Kein absichtlich provozierter Funkfehler, kein Mehrgeraetestress ausser dem parallel weiterlaufenden `net_erl_01`, kein neuer Offline-Timeout-Nachweis fuer `net_zrl_01`.
+
+6. Teststatus
+- Pflichtlektuere und technisch relevante Repo-Dateien wurden wie vorgegeben gelesen.
+- Reale Hardware und Ports:
+  - `master -> COM3`, Hardware-ID `USB VID:PID=303A:1001 SER=20:6E:F1:6D:92:C0`
+  - `net_zrl -> COM5`, Chip-MAC / USB-Serienkennung `8C:D0:B2:A8:B0:89`
+  - `net_erl_01` blieb parallel extern aktiv und wurde nicht umgesteckt oder neu geflasht
+- Reale Vorpruefung `COM5` vor Umwidmung:
+  - Bootbanner `=== SIM_BAT_FAKE_ALL v2.0 ===`
+  - wiederholt `Peer channel is not equal to the home channel, send fail!`
+  - wiederholt `[FATAL] batBegin fehlgeschlagen (Reason=4)`
+- Reales Bring-up nach Flash von `net_zrl` auf `COM5`:
+  - `COM5`: `NET-ZRL v0.2.2`, `Node-ID: net_zrl_01`, `HELLO_ACK empfangen`, `HEARTBEAT erfolgreich`, `STATE_REPORT erfolgreich`
+  - `COM3`: `net_zrl_01 MAC aktualisiert: 8C:D0:B2:A8:B0:89`, `Node net_zrl_01 ist online`, `HELLO von net_zrl_01`, `STATE_REPORT von net_zrl_01 verarbeitet`
+- Reale Start-Stabilisationsphase:
+  - retained MQTT-Status vor Reset: `online:true`
+  - direkt nach seriellem Monitor-Start genau `1 x online:false`
+  - danach wieder `online:true` um `2026-03-11T19:00:05.874+01:00` und `2026-03-11T19:00:05.942+01:00`
+  - ab `audit_log id > 462` keine weiteren `online:false`-Eintraege mehr
+- Reale offizielle Node-RED-Schaltvorgaenge:
+  - `2026-03-11T19:05:02.621+01:00` -> `relay_1_on` -> HTTP `200`
+  - `2026-03-11T19:11:02.698+01:00` -> `relay_2_on` -> HTTP `200`
+  - `2026-03-11T19:17:03.968+01:00` -> `relay_1_off` -> HTTP `200`
+  - `2026-03-11T19:23:04.056+01:00` -> `relay_2_off` -> HTTP `200`
+  - `2026-03-11T19:31:04.153+01:00` -> `relay_2_on_again` -> HTTP `200`
+  - `2026-03-11T19:37:04.383+01:00` -> `relay_1_on_again` -> HTTP `200`
+  - `2026-03-11T19:43:04.460+01:00` -> `relay_2_off_again` -> HTTP `200`
+  - `2026-03-11T19:49:04.539+01:00` -> `relay_1_off_again` -> HTTP `200`
+- Reale MQTT-Beobachtung ueber die stabile Laufphase:
+  - `8 x cmd/set`
+  - `8 x ack`
+  - `119 x state` ab `audit_log id > 462`
+  - `0 x status online:false` ab `audit_log id > 462`
+  - ACK-Serien:
+    - `ack_seq = 1..8`
+    - immer `attempts = 1`
+    - immer `retry_count = 0`
+- Reale SQLite-Beobachtung gesamt seit Baseline `audit_log id > 446`:
+  - `cmd/set|egress|8`
+  - `ack|ingest|8`
+  - `state|ingest|120`
+  - `status|ingest|5`
+  - `meta|ingest|3`
+  - genau `1 x status online:false`, und zwar in der kontrollierten Start-Stabilisationsphase
+- Reale SQLite-Beobachtung fuer die stabile Laufphase ab `audit_log id > 462`:
+  - `cmd/set|egress|8`
+  - `ack|ingest|8`
+  - `state|ingest|119`
+  - `status online:false|0`
+- Reale `device_last_state`-Endsicht:
+  - `status_json = {"node_id":"net_zrl_01","online":true,"device_type":"net_zrl","power_type":"mains","fw":"0.2.2"}`
+  - `state_json = {"node_id":"net_zrl_01","relay_1":false,"relay_2":false,"cover_mode":false,"cover_state":0,"cover_position":null,"fault":false}`
+  - `ack_json = {"node_id":"net_zrl_01","request_id":"nodered_net_zrl_01_relay_1_off_1773254944538","channel":"cmd/set","status":"ok","status_code":0,"ack_msg_type":5,"ack_seq":8,"attempts":1,"retry_count":0,"retry_exhausted":false,"source":"node_ack"}`
+- Reale serielle Beobachtung:
+  - `master`: `623` HEARTBEATs von `net_zrl_01`, Durchschnittsabstand ca. `5.012 s`, Minimum `4.796 s`, Maximum `6.129 s`
+  - `master`: `8 x COMMAND_SET_RELAY gesendet`, `0 x Retry`, `0 x ACK Timeout`, `0 x FEHLER`
+  - `net_zrl`: `8 x COMMAND_SET_RELAY empfangen`, `Relais 1` und `Relais 2` jeweils in beiden Richtungen geschaltet, keine Doppelwirkung
+- Ergebnis:
+  - Langzeitstabilitaets-Nachweis fuer `master <-> net_zrl_01` im aktuellen Repo-Stand bestanden
+
+7. Lehrerblick
+- Die Eigenleistung liegt hier nicht in neuer Architektur, sondern in sauberer Realarbeit:
+  - den anfänglichen Port-Blocker nicht wegerfunden
+  - die Nutzerfreigabe zur Umwidmung von `COM5` explizit als geaenderte Prämisse behandelt
+  - danach Builds, Flash, Bring-up, Serverpfad und Langzeitbeobachtung real und getrennt nachgewiesen
+- Als Referenz genutzt wurden nur die vorhandene Repo-Doku, der bestehende offizielle Node-RED-Pfad und die vorhandene Firmware-/Serverbasis.
+- Fachlich nachvollziehbar ist der Stand, weil Vorbefund, Nutzerfreigabe, reale Hardware-IDs, exakte Triggerzeiten, Request-IDs, MQTT- und SQLite-Summen, serielle Kernaussagen und die Start-Stabilisationsphase explizit benannt sind.

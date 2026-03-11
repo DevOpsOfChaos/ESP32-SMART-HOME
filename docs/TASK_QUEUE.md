@@ -2,13 +2,12 @@
 
 ## Prioritaet jetzt
 1. Offline-Timeout fuer einen weiteren offiziellen Pfad neben `master <-> net_erl_01` real nachweisen
-2. Langzeitstabilitaet fuer einen weiteren offiziellen Pfad neben `master <-> net_erl_01` real nachweisen
-3. Reale Hardware-Nachweise fuer `net_sen` und `bat_sen` aufbauen
-4. Hardware-README-Dateien der Basisgeraete von Platzhaltern auf reale Mindestinformationen heben
+2. Reale Hardware-Nachweise fuer `net_sen` und `bat_sen` aufbauen
+3. Hardware-README-Dateien der Basisgeraete von Platzhaltern auf reale Mindestinformationen heben
 
 ## Danach
-5. Test- und Nachweisdoku nur gegen neue reale Belege nachziehen
-6. Erst danach wieder Feature-Ausbau
+4. Test- und Nachweisdoku nur gegen neue reale Belege nachziehen
+5. Erst danach wieder Feature-Ausbau
 
 ## Arbeitsregel fuer die Queue
 - Nur reale Luecken aufnehmen.
