@@ -64,11 +64,10 @@ def run_stage(base_repo: Path, legacy_root: Path, stage: dict, base_branch: str)
 
     log_file = LOG_DIR / f"{stage_id}.log"
     cmd = (
-        f'codex exec --full-auto --sandbox workspace-write '
-        f'--cwd "{worktree_path}" '
-        f'"Read AGENTS.md and the project memory files first. '
-        f'Then execute the instructions from .night_stage_prompt.md exactly. '
-        f'If blocked, write the block clearly and stop only this stage."'
+        'codex exec --full-auto --sandbox workspace-write '
+        '"Read AGENTS.md and the project memory files first. '
+        'Then execute the instructions from .night_stage_prompt.md exactly. '
+        'If blocked, write the block clearly and stop only this stage."'
     )
 
     try:
