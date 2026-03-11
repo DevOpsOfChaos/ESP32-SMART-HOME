@@ -1,0 +1,79 @@
+Stand: beta12
+Datei: beta12_offizieller_serverseitiger_rueckweg_nachweis_net_erl_01.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Der offizielle serverseitige Rueckweg-Nachweis fuer `net_erl_01` war im Repo noch offen.
+- `beta11` belegt nur den MQTT-Minimalpfad mit lokalem Direktclient und zaehlt deshalb nicht als serverseitiger Bedienpfad.
+
+2. Befund vor der Korrektur
+- `server/nodered/build-flows.js` und die daraus laufende `flows.json` enthielten nur MQTT-Ingest, SQLite- und Influx-Pfade.
+- Der versionierte Flow hatte vor diesem Stand keinen echten `cmd/set`-Ausloeser und keinen `mqtt out` fuer `smarthome/node/net_erl_01/cmd/set`, obwohl `server/flows/README.md` bereits einen Dashboard-Egress behauptete.
+- Ohne minimale Korrektur waere jeder "Server-Nachweis" nur ein umetikettierter Direktclient-Test gewesen.
+
+3. Aenderung
+- `server/nodered/build-flows.js` wurde minimal um einen engen Command-Pfad fuer `net_erl_01` ergaenzt:
+  - Node-RED-Trigger `inject_net_erl_on` und `inject_net_erl_off`
+  - dieselbe Backend-Strecke zusaetzlich ueber zwei technische Dashboard-Buttons auf `/dashboard/aktoren`
+  - Function-Node `Build net_erl_01 cmd/set`
+  - MQTT-Out auf `smarthome/node/net_erl_01/cmd/set`
+- Der Payload bleibt vertragstreu:
+  - `{"cmd":"set_relay","relay_1":<bool>,"request_id":"nodered_net_erl_01_<on|off>_<timestamp>"}`
+- Vor dem Lauf wurde der Stack sauber aus den versionierten Dateien neu gestartet:
+  - `docker compose down`
+  - `docker volume rm server_nodered_data`
+  - `docker compose up --build -d`
+
+4. Begruendung
+- Ohne einen versionierten Node-RED-Ausloeser gibt es keinen offiziellen serverseitigen Bedienpfad.
+- Der Eingriff bleibt bewusst klein: kein neues Topic, keine Firmware-Aenderung, keine neue Automations- oder Wetterlogik.
+- Ein lokaler MQTT-Testclient wurde nicht als Aktionspfad benutzt; `mosquitto_sub` diente nur der passiven Beobachtung.
+
+5. Verbesserungseffekt
+- Der Rueckweg `Server/Node-RED -> MQTT -> Master -> net_erl_01 -> MQTT/Server` ist jetzt fuer `net_erl_01` real belegbar.
+- `cmd/set` kommt nachvollziehbar aus dem Serverpfad, weil der Trigger via `POST /inject/<id>` in Node-RED lief und der Payload `request_id` mit Praefix `nodered_net_erl_01_...` trug.
+- SQLite bleibt semantisch sauber:
+  - `audit_log` zeigt die ingested `state`-Folgenachrichten
+  - `device_last_state.status_json` und `state_json` bleiben getrennt
+  - `ack_json` und `event_json` blieben im Nachweislauf leer
+
+6. Risiken / Trade-offs
+- `audit_log` speichert im aktuellen Serverstand keine ausgehenden `cmd/set`-Publishes; dieser Publish wurde fuer den Nachweis brokerseitig mit `mosquitto_sub` beobachtet.
+- Der versionierte Command-Pfad ist bewusst auf `net_erl_01` begrenzt und kein generischer Multi-Device-Kommandobaukasten.
+- `cmd/get` und `cfg/set` bleiben im aktuellen Flow-Generator weiterhin offen.
+
+7. Teststatus
+- Reale Servertrigger:
+  - `POST http://127.0.0.1:1880/inject/inject_net_erl_on`
+  - `POST http://127.0.0.1:1880/inject/inject_net_erl_off`
+- Reale MQTT-Beobachtung nur passiv:
+  - `mosquitto_sub -R -v -F '%I|%t|%p' -t 'smarthome/node/net_erl_01/cmd/set' -t 'smarthome/node/net_erl_01/state' -C 4`
+- Reale serielle Beobachtung:
+  - `master -> COM3`
+  - `net_erl -> COM10`
+- Reale beobachtete MQTT-Nachrichten:
+  - `smarthome/node/net_erl_01/cmd/set` mit `{"cmd":"set_relay","relay_1":true,"request_id":"nodered_net_erl_01_on_1773226163861"}`
+  - `smarthome/node/net_erl_01/state` mit `{"node_id":"net_erl_01","relay_1":true,"fault":false}`
+  - `smarthome/node/net_erl_01/cmd/set` mit `{"cmd":"set_relay","relay_1":false,"request_id":"nodered_net_erl_01_off_1773226167892"}`
+  - `smarthome/node/net_erl_01/state` mit `{"node_id":"net_erl_01","relay_1":false,"fault":false}`
+- Reale Master-Logs:
+  - `MQTT empfangen smarthome/node/net_erl_01/cmd/set -> ...`
+  - `COMMAND_SET_RELAY gesendet`
+  - `STATE_REPORT von net_erl_01 verarbeitet`
+- Reale net_erl-Logs:
+  - `COMMAND_SET_RELAY empfangen: relay_1=true`
+  - `Relais physisch EIN auf GPIO10 (Master-Kommando)`
+  - `COMMAND_SET_RELAY empfangen: relay_1=false`
+  - `Relais physisch AUS auf GPIO10 (Master-Kommando)`
+- Reale SQLite-Belege:
+  - `audit_log` enthaelt nach dem Trigger die `state`-Uebergaenge `relay_1:true` und `relay_1:false`
+  - `device_last_state` zeigt fuer `net_erl_01` getrenntes `status_json` und `state_json`
+  - `ack_json` und `event_json` blieben leer
+- Nicht beansprucht:
+  - kein neuer Influx-Nachweis
+
+8. Lehrerblick
+- Die Eigenleistung steckt hier im sauberen Trennen von Behauptung und Wirklichkeit: erst Flow-Generator gegen die laufende `flows.json` verifiziert, dann den fehlenden offiziellen Serverpfad minimal nachgeruestet, den Stack sauber neu aufgebaut und den Rueckweg real ueber Hardware, Broker, SQLite und serielle Logs durchgezogen.
+- Als Referenz genutzt wurden nur die versionierten Repo-Dateien, die vorhandene Serverdoku und die bestehende Firmware-/MQTT-Vertragsbasis.
+- Fachlich nachvollziehbar ist der Stand, weil Trigger, Topics, Payloads, COM-Ports, serielle Reaktionen und SQLite-Befunde konkret genannt sind und der Aktionspfad nicht ueber einen lokalen MQTT-Direktclient verkauft wird.

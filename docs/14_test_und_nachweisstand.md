@@ -24,16 +24,17 @@ Nicht diese Datei:
 | Server-V1 MQTT-Ingest und SQLite-Ablage | nachgewiesen | real lokal | `PROTOKOLL/beta08_server_mqtt_ingest_realpayloads.txt` |
 | Influx-Schreibpfad fuer numerische Sensorwerte | nachgewiesen | real lokal | `PROTOKOLL/beta09_influx_schreibpfad_verifiziert.txt` |
 | Lokale MQTT-Broker-Auth in der Serverbasis | offen | offen | kein getrackter Nachweis im Repo-Stand |
-| Konsolidierter realer Gesamt-Nachweis `Node -> Master -> MQTT/Server -> Master -> Node` | offen | offen | kein einzelner offizieller Gesamtbeleg im Repo |
+| Konsolidierter realer Gesamt-Nachweis fuer `net_erl_01` ueber serverseitigen Node-RED-Pfad | nachgewiesen | real hardware, real lokal | `PROTOKOLL/beta12_offizieller_serverseitiger_rueckweg_nachweis_net_erl_01.txt` |
 | Reproduzierbarer Build-/Flash-/Seriell-Runbook | nachgewiesen | real hardware | `docs/16_build_flash_bringup_master_net_erl.md`, `PROTOKOLL/beta11_realer_retest_master_net_erl_mqtt_minimalpfad.txt` |
 
 ## Wichtige Klarstellungen
 - `docs/14_minimalstrecke_net_erl_master.md` beschreibt den technischen Ablauf und den manuellen Pruefpfad der Minimalstrecke. Es ist kein globales Nachweisdokument.
 - `PROTOKOLL/beta03_minimalstrecke_net_erl_master.txt` beschreibt die erste vertikale Strecke als Zielbild und Buildstand, belegt aber keinen realen Gesamtlauf auf Hardware.
 - `PROTOKOLL/beta06_firmware_bringup_master_net_erl..txt` belegt den realen Bring-up von `master` und `net_erl`, nennt aber einen vollstaendigen End-to-End-Nachweis bis in den Server ausdruecklich noch offen.
-- `PROTOKOLL/beta11_realer_retest_master_net_erl_mqtt_minimalpfad.txt` belegt den erneuten realen Lauf mit aktuellem `master`-/`net_erl`-Stand, sichtbaren MQTT-V1-Topics und realem Relais-Schaltpfad. Es ersetzt trotzdem nicht den noch offenen Gesamtbeleg ueber eine serverseitige Bedien- oder Automationsstrecke.
+- `PROTOKOLL/beta11_realer_retest_master_net_erl_mqtt_minimalpfad.txt` belegt den erneuten realen Lauf mit aktuellem `master`-/`net_erl`-Stand, sichtbaren MQTT-V1-Topics und realem Relais-Schaltpfad. Der offizielle serverseitige Bedienpfad war dort noch nicht enthalten.
+- `PROTOKOLL/beta12_offizieller_serverseitiger_rueckweg_nachweis_net_erl_01.txt` belegt den offiziellen serverseitigen Rueckweg fuer `net_erl_01` ueber Node-RED. Der `cmd/set`-Publish wurde brokerseitig mitgeschnitten; SQLite/Audit zeigen die ingested Folge-States, nicht den ausgehenden Command selbst.
 
 ## Offene Nachweis- und Doku-Luecken
-- ein sauberer Gesamtbeleg fuer die reale Strecke ueber Hardware und Server
+- weitere serverseitige Rueckweg-Nachweise fuer andere Basisgeraete als `net_erl_01`
 - reale Hardware-Nachweise fuer `net_zrl`, `net_sen` und `bat_sen`
 - Hardware-README-Dateien enthalten noch keine belastbaren Mindestdaten zu Platine, Pins, Flash und Variationen

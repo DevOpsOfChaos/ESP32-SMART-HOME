@@ -9,9 +9,13 @@ const ids = {
     tabState: "tab_state",
     tabConfig: "tab_config",
     tabTimeSeries: "tab_time_series",
+    tabCommand: "tab_command",
     tabLogging: "tab_logging",
     mqttBroker: "cfg_mqtt_broker",
     sqliteDb: "cfg_sqlite_db",
+    uiBase: "cfg_ui_base",
+    uiPageActors: "cfg_ui_page_actors",
+    uiGroupNetErlTest: "cfg_ui_group_net_erl_test",
     mqttServerStatus: "mqtt_server_status",
     mqttMasterStatus: "mqtt_master_status",
     mqttMasterEvent: "mqtt_master_event",
@@ -46,6 +50,12 @@ const ids = {
     linkInTimeSeries: "link_in_time_series",
     buildInfluxLine: "fn_build_influx_line",
     influxWrite: "http_influx_write",
+    uiButtonNetErlOn: "ui_button_net_erl_on",
+    uiButtonNetErlOff: "ui_button_net_erl_off",
+    injectNetErlOn: "inject_net_erl_on",
+    injectNetErlOff: "inject_net_erl_off",
+    buildNetErlCmdSet: "fn_build_net_erl_cmd_set",
+    mqttCmdSetOut: "mqtt_cmd_set_out",
     linkOutAudit: "link_out_audit",
     linkInAudit: "link_in_audit",
     buildAuditInsert: "fn_build_audit_insert",
@@ -813,6 +823,18 @@ const buildInfluxLineFunc = script(
     'return msg;'
 );
 
+const buildNetErlCmdSetFunc = script(
+    'const relayState = msg.payload === true || msg.payload === "true" || msg.payload === 1 || msg.payload === "1";',
+    'const stateLabel = relayState ? "on" : "off";',
+    'msg.topic = "smarthome/node/net_erl_01/cmd/set";',
+    'msg.payload = JSON.stringify({',
+    '    cmd: "set_relay",',
+    '    relay_1: relayState,',
+    '    request_id: "nodered_net_erl_01_" + stateLabel + "_" + Date.now()',
+    '});',
+    'return msg;'
+);
+
 const buildAuditInsertFunc = script(
     ...toSqlLines,
     'const event = msg.payload || {};',
@@ -874,6 +896,14 @@ addNode({
 });
 
 addNode({
+    id: ids.tabCommand,
+    type: "tab",
+    label: "50 Command Egress",
+    disabled: false,
+    info: "Dashboard-triggered cmd/set publish for the existing net_erl_01 proof path."
+});
+
+addNode({
     id: ids.tabLogging,
     type: "tab",
     label: "80 Logging",
@@ -918,6 +948,60 @@ addNode({
     db: "${SQLITE_PATH}",
     mode: "RWC",
     name: "sqlite_db"
+});
+
+addNode({
+    id: ids.uiBase,
+    type: "ui-base",
+    name: "SmartHome Dashboard",
+    path: "/dashboard",
+    appIcon: "",
+    includeClientData: true,
+    acceptsClientConfig: ["ui-notification", "ui-control"],
+    showPathInSidebar: false,
+    headerContent: "page",
+    navigationStyle: "default",
+    titleBarStyle: "default",
+    showReconnectNotification: true,
+    notificationDisplayTime: 1,
+    showDisconnectNotification: true,
+    allowInstall: false
+});
+
+addNode({
+    id: ids.uiPageActors,
+    type: "ui-page",
+    name: "Aktoren",
+    ui: ids.uiBase,
+    path: "/aktoren",
+    icon: "toggle-switch",
+    layout: "grid",
+    theme: "default",
+    breakpoints: [
+        { name: "Default", px: 0, cols: 3 },
+        { name: "Tablet", px: 576, cols: 6 },
+        { name: "Small Desktop", px: 768, cols: 9 },
+        { name: "Desktop", px: 1024, cols: 12 }
+    ],
+    order: 1,
+    className: "",
+    visible: true,
+    disabled: false
+});
+
+addNode({
+    id: ids.uiGroupNetErlTest,
+    type: "ui-group",
+    name: "net_erl_01 Test",
+    page: ids.uiPageActors,
+    width: 6,
+    height: 1,
+    order: 1,
+    showTitle: true,
+    className: "",
+    visible: true,
+    disabled: false,
+    groupType: "default"
 });
 
 [
@@ -1304,6 +1388,108 @@ addNode({
     x: 710,
     y: 120,
     wires: [[]]
+});
+
+[
+    { nodeId: ids.injectNetErlOn, name: "Trigger Relay 1 EIN", payload: "true", x: 180, y: 60 },
+    { nodeId: ids.injectNetErlOff, name: "Trigger Relay 1 AUS", payload: "false", x: 180, y: 240 }
+].forEach(({ nodeId, name, payload, x, y }) => {
+    addNode({
+        id: nodeId,
+        type: "inject",
+        z: ids.tabCommand,
+        name,
+        props: [
+            { p: "payload" },
+            { p: "topic", vt: "str" }
+        ],
+        repeat: "",
+        crontab: "",
+        once: false,
+        onceDelay: 0.1,
+        topic: "",
+        payload,
+        payloadType: "bool",
+        x,
+        y,
+        wires: [[ids.buildNetErlCmdSet]]
+    });
+});
+
+[
+    { nodeId: ids.uiButtonNetErlOn, name: "Relay 1 EIN", label: "Relay 1 EIN", payload: "true", order: 1, x: 190, y: 120 },
+    { nodeId: ids.uiButtonNetErlOff, name: "Relay 1 AUS", label: "Relay 1 AUS", payload: "false", order: 2, x: 190, y: 180 }
+].forEach(({ nodeId, name, label, payload, order, x, y }) => {
+    addNode({
+        id: nodeId,
+        type: "ui-button",
+        z: ids.tabCommand,
+        group: ids.uiGroupNetErlTest,
+        name,
+        label,
+        order,
+        width: 3,
+        height: 1,
+        emulateClick: false,
+        tooltip: "",
+        color: "",
+        bgcolor: "",
+        className: "",
+        icon: "",
+        iconPosition: "left",
+        payload,
+        payloadType: "bool",
+        topic: "topic",
+        topicType: "msg",
+        buttonColor: "",
+        textColor: "",
+        iconColor: "",
+        enableClick: true,
+        enablePointerdown: false,
+        pointerdownPayload: "",
+        pointerdownPayloadType: "str",
+        enablePointerup: false,
+        pointerupPayload: "",
+        pointerupPayloadType: "str",
+        x,
+        y,
+        wires: [[ids.buildNetErlCmdSet]]
+    });
+});
+
+addNode({
+    id: ids.buildNetErlCmdSet,
+    type: "function",
+    z: ids.tabCommand,
+    name: "Build net_erl_01 cmd/set",
+    func: buildNetErlCmdSetFunc,
+    outputs: 1,
+    noerr: 0,
+    initialize: "",
+    finalize: "",
+    libs: [],
+    x: 510,
+    y: 150,
+    wires: [[ids.mqttCmdSetOut]]
+});
+
+addNode({
+    id: ids.mqttCmdSetOut,
+    type: "mqtt out",
+    z: ids.tabCommand,
+    name: "Publish cmd/set",
+    topic: "",
+    qos: "1",
+    retain: "false",
+    respTopic: "",
+    contentType: "",
+    userProps: "",
+    correl: "",
+    expiry: "",
+    broker: ids.mqttBroker,
+    x: 810,
+    y: 150,
+    wires: []
 });
 
 addNode({
