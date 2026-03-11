@@ -271,7 +271,9 @@ uint16_t holeHelloCaps(const SmartHome::HelloPayload& payload) {
 }
 
 bool nutztCommandAckPfad(size_t nodeIndex) {
-    return strcmp(NODE_DEFINITIONS[nodeIndex].node_id, "net_erl_01") == 0;
+    const char* nodeId = NODE_DEFINITIONS[nodeIndex].node_id;
+    return strcmp(nodeId, "net_erl_01") == 0 ||
+           strcmp(nodeId, "net_zrl_01") == 0;
 }
 
 bool gleicheRequestId(const char* links, const char* rechts) {

@@ -1,0 +1,145 @@
+Stand: beta20
+Datei: beta20_net_zrl_01_offizieller_ack_retry_nachweis.txt
+Datum: 2026-03-11
+Autor: Codex
+
+1. Anlass
+- Fuer `net_zrl_01` war der offizielle kombinierte Live-Pfad seit `beta16` belegt, aber ACK/Retry fuer den offiziellen `cmd/set`-Pfad blieb offen.
+- Die Aufgabe blieb eng: keine neuen Geraetefeatures, keine Rolladen-Sonderlogik, keine Architektur- oder Topic-Aenderung. Es sollte nur der reale ACK-/Retry-Nachweis fuer den offiziellen `net_zrl_01`-Pfad sauber geschlossen werden.
+
+2. Ist-Stand vor der Aenderung
+- MQTT-Vertrag und Server-Ingest hatten das Topic `smarthome/node/<node_id>/ack` bereits vorgesehen; `ack` wurde in Node-RED und SQLite schon getrennt von `state` und `event` verarbeitet.
+- Der versionierte Node-RED-Pfad fuer `net_zrl_01`-`cmd/set` war seit `beta16` real vorhanden, inklusive `audit_log`-Egress fuer den offiziellen Triggerpfad.
+- Im real laufenden `master`-/`net_zrl`-Code war ACK/Retry fuer diesen Pfad aber noch nicht aktiv:
+  - der Master koppelte `request_id`, `seq`, `SH_FLAG_ACK_REQUEST`, Retry und MQTT-ACK nur fuer `net_erl_01`
+  - `net_zrl` quittierte `SH_MSG_CMD` nicht mit `SH_MSG_ACK`
+  - retransmittierte `net_zrl`-Commands wurden nicht als Duplikat erkannt
+- Der ack-nahe Mechanismus im `net_zrl`-Pfad war damit weiterhin nur `HELLO_ACK` fuer die Anmeldung, nicht fuer `cmd/set`.
+- Zusaetzliche reale Grenze des bestehenden versionierten Node-RED-Inject-Pfads: Er generiert pro Lauf bewusst eine neue `request_id` und ignoriert HTTP-Body-Overrides. Ein Duplikatlauf mit identischer `request_id` ist darueber also nicht erzwingbar, solange kein zusaetzlicher Testtrigger gebaut wird.
+
+3. Aenderung
+- Minimal noetige Firmware-Erweiterung im Master:
+  - der bestehende ACK-/Retry-Pilotpfad wurde von `net_erl_01` auf `net_zrl_01` erweitert
+  - `request_id`, `seq`, `SH_FLAG_ACK_REQUEST`, `SH_FLAG_RETRANSMIT`, Retry-Fenster und MQTT-ACK nutzen dabei denselben bereits vorhandenen Master-Mechanismus
+- Minimal noetige Firmware-Erweiterung in `net_zrl`:
+  - `SH_MSG_CMD` mit `SH_FLAG_ACK_REQUEST` wird nach Verarbeitung mit `SH_MSG_ACK` quittiert
+  - derselbe retransmittierte Command (`seq` + identischer `CmdPayload`) wird erkannt und nicht doppelt verarbeitet
+  - keine Cover-Sonderlogik, keine neuen Commands, keine Architekturverschiebung
+- Keine Server-, Flow-, Topic- oder DB-Schema-Aenderung.
+- Fuer den Duplikatnachweis wurde bewusst kein neuer Flow-Testtrigger gebaut. Der identische `request_id`-Lauf erfolgte kontrolliert als direkter serverseitiger Publish auf das bereits offizielle Topic `smarthome/node/net_zrl_01/cmd/set`.
+
+4. Begruendung
+- Die Luecke lag nicht im Vertrag, sondern im Laufzeitpfad. Ein neues Topic, neues Tabellenmodell oder neuer Architekturpfad waere Ausweichbewegung gewesen.
+- `net_zrl` sollte als allgemeine Zwei-Relais-Basis sauber bleiben. Darum wurden nur ACK-, Retransmit- und Duplikatmechanik nachgezogen, aber keine Rolladen- oder Speziallogik.
+- Der versionierte Inject-Pfad mit fester neuer `request_id` ist fuer normale ACK-/Retry-Laeufe ausreichend, fuer einen echten identischen `request_id`-Duplikatlauf aber ungeeignet. Diese Grenze wurde benannt statt mit einer stillen Flow-Erweiterung zu kaschieren.
+
+5. Verbesserungseffekt
+- Der offizielle `Node-RED -> cmd/set -> Master -> net_zrl_01`-Pfad liefert jetzt einen realen ACK-Rueckkanal auf `smarthome/node/net_zrl_01/ack`.
+- `request_id` und `seq` laufen fuer diesen Pilotpfad jetzt real zusammen:
+  - `cmd/set` bleibt serverseitig fachlich der ausloesende Pfad
+  - ACK referenziert denselben Command ueber `request_id`, `ack_seq`, `ack_msg_type`, `attempts` und `retry_count`
+- Der kleine Retry-Pfad ist real beobachtbar:
+  - erster Sendeversuch in den Reset hinein scheitert
+  - Retransmit kommt mit identischer `seq` und `SH_FLAG_RETRANSMIT`
+  - ACK bestaetigt `attempts = 2`, `retry_count = 1`
+- Ein identischer `request_id` fuehrt nicht zu einer zweiten Funkwirkung. Der Master publiziert stattdessen das gecachte ACK erneut.
+
+6. Risiken / Trade-offs
+- ACK/Retry bleibt bewusst weiter ein enger Pilotmechanismus fuer die offiziellen `cmd/set`-Pfade von `net_erl_01` und `net_zrl_01`.
+- Der Master verfolgt weiterhin nur genau ein offenes ACK-pflichtiges `cmd/set` gleichzeitig. Neue Requests waehrend eines offenen Laufs werden fuer diesen Pilotmechanismus als `busy` beantwortet.
+- Der Duplikatnachweis nutzte fuer die zweite identische `request_id` keinen Node-RED-Inject, sondern einen direkten serverseitigen Publish auf das offizielle Topic. Deshalb entstehen fuer diesen Teil bewusst keine zusaetzlichen `cmd/set:egress`-Zeilen aus dem Node-RED-Auditpfad, waehrend `ack` und `state` weiter normal in SQLite landen.
+- Der kontrollierte Retry wurde ueber `COM10`-Close/Open und den dadurch real ausgeloesten `USB_UART_CHIP_RESET` erzwungen. Das ist ein sauberer Pilotnachweis fuer den Retry-Pfad, aber kein generischer Funkstoerungstest.
+
+7. Teststatus
+- Reale Builds:
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e net_zrl`
+- Reale Uploads:
+  - `master -> COM3`, Hardware-MAC `20:6E:F1:6D:92:C0`
+  - `net_zrl -> COM10`, Hardware-MAC `20:6E:F1:6B:6B:30`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master -t upload --upload-port COM3`
+  - `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e net_zrl -t upload --upload-port COM10`
+- Reale Serverbasis vor dem Nachweis:
+  - `server-mosquitto-1`, `server-influxdb-1`, `server-nodered-1` gesund
+  - laufendes `/data/flows.json` war bytegleich zum aktuellen `server/nodered/build-flows.js`
+  - `audit_log MAX(id)` vor dem Nachweis: `294`
+
+### 7.1 Normale ACK-Laeufe ueber den offiziellen Node-RED-Pfad
+- `POST http://127.0.0.1:1880/inject/inject_net_zrl_relay_1_on` -> HTTP `200`
+  - MQTT `cmd/set`: `request_id = nodered_net_zrl_01_relay_1_on_1773244646478`
+  - MQTT `ack`: `ack_seq = 1`, `attempts = 1`, `retry_count = 0`
+  - MQTT `state`: `relay_1 = true`, `relay_2 = false`
+- `POST http://127.0.0.1:1880/inject/inject_net_zrl_relay_2_on` -> HTTP `200`
+  - MQTT `cmd/set`: `request_id = nodered_net_zrl_01_relay_2_on_1773244646586`
+  - MQTT `ack`: `ack_seq = 2`, `attempts = 1`, `retry_count = 0`
+  - MQTT `state`: `relay_1 = true`, `relay_2 = true`
+
+### 7.2 Kontrollierter Retry-Lauf ueber den offiziellen Node-RED-Pfad
+- Methode:
+  - `COM10` wurde kontrolliert geschlossen und sofort wieder geoeffnet; der erneute Port-Open loeste real `rst:0x15 (USB_UART_CHIP_RESET)` auf `net_zrl_01` aus.
+  - Unmittelbar danach lief `POST http://127.0.0.1:1880/inject/inject_net_zrl_relay_1_on` -> HTTP `200`.
+- Reale Master-Beobachtung:
+  - erster Sendeversuch: `ESP-NOW Sendestatus an 20:6E:F1:6B:6B:30: FEHLER`
+  - danach `COMMAND_SET_RELAY retry gesendet`
+  - `Retry 1/3 fuer net_zrl_01 request_id=nodered_net_zrl_01_relay_1_on_1773244646841 seq=3`
+  - anschliessend `ACK von net_zrl_01 ... seq=3 status=0`
+- Reale `net_zrl`-Beobachtung:
+  - Bootmarker `ESP-ROM:esp32c3-api1-20210207`
+  - danach `COMMAND_SET_RELAY empfangen: relay_1=true (retry)`
+  - `ACK erfolgreich`
+  - `STATE_REPORT erfolgreich`
+- Reale MQTT-Beobachtung:
+  - `2026-03-11T15:57:26+0000|smarthome/node/net_zrl_01/cmd/set|{"cmd":"set_relay","relay_1":true,"request_id":"nodered_net_zrl_01_relay_1_on_1773244646841"}`
+  - `2026-03-11T15:57:27+0000|smarthome/node/net_zrl_01/ack|{"node_id":"net_zrl_01","request_id":"nodered_net_zrl_01_relay_1_on_1773244646841","channel":"cmd/set","status":"ok","status_code":0,"ack_msg_type":5,"ack_seq":3,"attempts":2,"retry_count":1,"retry_exhausted":false,"source":"node_ack"}`
+  - `2026-03-11T15:57:27+0000|smarthome/node/net_zrl_01/state|{"node_id":"net_zrl_01","relay_1":true,"relay_2":false,"cover_mode":false,"cover_state":0,"cover_position":null,"fault":false}`
+
+### 7.3 Duplikatlauf mit identischer `request_id`
+- Reale Grenze des offiziellen versionierten Inject-Pfads:
+  - `POST /inject/inject_net_zrl_relay_2_off` mit HTTP-Body-Override lieferte trotzdem `{"cmd":"set_relay","relay_2":false,"request_id":"nodered_net_zrl_01_relay_2_off_..."}`.
+  - Damit war fuer einen echten identischen `request_id`-Lauf klar: Der aktuelle versionierte Inject-Helfer erzwingt immer eine neue `request_id`.
+- Deshalb kontrollierter serverseitiger Direktpublish auf das offizielle Topic:
+  - zweimal `{"cmd":"set_relay","relay_1":false,"request_id":"dup_net_zrl_relay_1_off_1773244647744"}` auf `smarthome/node/net_zrl_01/cmd/set`
+- Reale MQTT-Beobachtung:
+  - 2x `cmd/set` mit identischer `request_id`
+  - 2x `ack` mit identischer `request_id`
+  - genau 1x `state` mit `relay_1:false`
+- Reale Master-Beobachtung:
+  - erster Publish: `COMMAND_SET_RELAY gesendet`, danach `ACK von net_zrl_01 ... seq=5`
+  - zweiter Publish: `Duplikat request_id erkannt, cached ACK erneut publiziert`
+  - kein zweites `COMMAND_SET_RELAY gesendet`
+- Reale `net_zrl`-Beobachtung:
+  - genau ein `COMMAND_SET_RELAY empfangen: relay_1=false`
+  - genau ein `Relais 1 -> AUS (Master-Kommando)`
+  - kein zweiter physischer Schaltlauf
+
+### 7.4 SQLite- und Audit-Sicht
+- Neue `audit_log`-Summen seit `id > 294`:
+  - `ack|ingest|5`
+  - `cmd/set|egress|3`
+  - `meta|ingest|2`
+  - `state|ingest|6`
+  - `status|ingest|4`
+- Die drei offiziellen Node-RED-Laeufe landeten sauber als getrennte Egress-/ACK-/State-Zeilen:
+  - `306|egress|cmd/set|...|request_id=nodered_net_zrl_01_relay_1_on_1773244646478`
+  - `307|ingest|ack|...|retry_count=0`
+  - `308|ingest|state|...|relay_1:true relay_2:false`
+  - `309|egress|cmd/set|...|request_id=nodered_net_zrl_01_relay_2_on_1773244646586`
+  - `310|ingest|ack|...|retry_count=0`
+  - `311|ingest|state|...|relay_1:true relay_2:true`
+  - `312|egress|cmd/set|...|request_id=nodered_net_zrl_01_relay_1_on_1773244646841`
+  - `316|ingest|ack|...|attempts=2 retry_count=1`
+  - `317|ingest|state|...|relay_1:true relay_2:false`
+- Der kontrollierte Reset erzeugte zusaetzlich erwartbare `status`-, `meta`- und initiale `state`-Zeilen fuer das Wieder-online-Kommen (`300`, `302`, `303`, `304`, `305`, `313`, `314`, `315`).
+- Der Duplikatlauf erzeugte bewusst keine neuen `cmd/set:egress`-Zeilen, weil er nicht ueber den versionierten Node-RED-Trigger lief. Trotzdem kamen ACK und State sauber getrennt in SQLite an:
+  - `318|ingest|ack|...|request_id=dup_net_zrl_relay_1_off_1773244647744`
+  - `319|ingest|state|...|relay_1:false relay_2:false`
+  - `320|ingest|ack|...|request_id=dup_net_zrl_relay_1_off_1773244647744`
+- `device_last_state` blieb getrennt:
+  - `status_json = {"node_id":"net_zrl_01","online":true,"device_type":"net_zrl","power_type":"mains","fw":"0.2.2"}`
+  - `state_json = {"node_id":"net_zrl_01","relay_1":false,"relay_2":false,"cover_mode":false,"cover_state":0,"cover_position":null,"fault":false}`
+  - `ack_json = {"node_id":"net_zrl_01","request_id":"dup_net_zrl_relay_1_off_1773244647744","channel":"cmd/set","status":"ok","status_code":0,"ack_msg_type":5,"ack_seq":5,"attempts":1,"retry_count":0,"retry_exhausted":false,"source":"node_ack"}`
+
+8. Lehrerblick
+- Die Eigenleistung liegt hier im Schliessen einer konkreten Laufzeitluecke statt im Erfinden neuer Struktur: vorhandenen ACK-/Retry-Pilotpfad im Master sauber auf `net_zrl_01` erweitert, ACK und Duplikatschutz im Node minimal nachgezogen und danach alles real gegen Hardware, Broker, Serial und SQLite gemessen.
+- Als Referenz genutzt wurden der bestehende MQTT-Vertrag, der bereits belegte `net_zrl_01`-Rueckweg aus `beta16` und der enge ACK-/Retry-Pilotmechanismus aus `beta17` fuer `net_erl_01`.
+- Fachlich nachvollziehbar ist der Stand, weil beide normalen ACK-Laeufe, der kontrollierte Retry, die Duplikatgrenze des versionierten Inject-Pfads, der kontrollierte Direktpublish mit identischer `request_id`, konkrete Request-IDs, serielle Kernaussagen und SQLite-Zeilen alle explizit benannt sind.

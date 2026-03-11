@@ -37,7 +37,7 @@ constexpr unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000UL;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000UL;
 
 // ACK-/Retry-Nachweis bleibt im aktuellen Stand bewusst eng
-// auf den offiziellen net_erl_01-cmd/set-Pilotpfad begrenzt.
+// auf die offiziellen cmd/set-Pilotpfade net_erl_01 und net_zrl_01 begrenzt.
 constexpr unsigned long COMMAND_ACK_TIMEOUT_MS = 800UL;
 constexpr uint8_t COMMAND_MAX_RETRIES = 3U;
 constexpr unsigned long COMMAND_ACK_CACHE_MS = 30000UL;

@@ -52,6 +52,7 @@ struct NodeState {
     bool fault;
     bool state_report_offen;
     bool relais_verriegelt;
+    bool letzter_cmd_gueltig;
     uint8_t cover_state;
     uint8_t cover_position;
     unsigned long verriegelung_bis_ms;
@@ -60,6 +61,8 @@ struct NodeState {
     unsigned long letzter_state_ms;
     uint8_t master_mac[6];
     uint8_t naechste_seq;
+    uint8_t letzter_cmd_seq;
+    SmartHome::CmdPayload letzter_cmd_payload;
 };
 
 NodeState nodeStatus = {};
@@ -147,6 +150,14 @@ bool sendePaket(const uint8_t* zielMac, uint8_t msgType, const void* payload, si
     return true;
 }
 
+bool sendeAck(const uint8_t* zielMac, uint8_t ackSeq, uint8_t ackMsgType, uint8_t status) {
+    SmartHome::AckPayload payload = {};
+    payload.ack_seq = ackSeq;
+    payload.ack_msg_type = ackMsgType;
+    payload.status = status;
+    return sendePaket(zielMac, SH_MSG_ACK, &payload, sizeof(payload), "ACK");
+}
+
 bool sendeHello() {
     SmartHome::HelloPayload payload = {};
     copyText(payload.device_id, sizeof(payload.device_id), DEVICE_ID);
@@ -205,6 +216,12 @@ bool sendeStateReport() {
     }
 
     return false;
+}
+
+bool istDoppeltesCmd(uint8_t seq, const SmartHome::CmdPayload& cmd) {
+    return nodeStatus.letzter_cmd_gueltig &&
+           nodeStatus.letzter_cmd_seq == seq &&
+           memcmp(&nodeStatus.letzter_cmd_payload, &cmd, sizeof(cmd)) == 0;
 }
 
 void schreibeRelaisPin(uint8_t relayIndex, bool einschalten) {
@@ -361,10 +378,10 @@ void verarbeiteHelloAck(const uint8_t* senderMac, const SmartHome::HelloAckPaylo
     nodeStatus.state_report_offen = true;
 }
 
-void verarbeiteRelayCmd(const SmartHome::CmdPayload& cmd) {
+bool verarbeiteRelayCmd(const SmartHome::CmdPayload& cmd) {
     if (cmd.param1 > 1U) {
         logf("WARN", "Relay-CMD ignoriert: relay_index=%u", (unsigned)cmd.param1);
-        return;
+        return false;
     }
 
     bool einschalten = (cmd.param2 == 2U)
@@ -372,46 +389,86 @@ void verarbeiteRelayCmd(const SmartHome::CmdPayload& cmd) {
         : (cmd.param2 == 1U);
 
     schalteRelaisGesichert(cmd.param1, einschalten, "Master-Kommando");
+    return true;
 }
 
-void verarbeiteCoverCmd(const SmartHome::CmdPayload& cmd) {
+bool verarbeiteCoverCmd(const SmartHome::CmdPayload& cmd) {
     if (!COVER_MODUS_AKTIV) {
         logf("WARN", "Cover-CMD ignoriert: COVER_MODUS_AKTIV=false");
-        return;
+        return false;
     }
 
     switch (cmd.param1) {
         case SH_COVER_STATE_STOPPED:
             stoppeFahrt("Cover-Stop");
-            break;
+            return true;
         case SH_COVER_STATE_MOVING_UP:
             stoppeFahrt("Cover-Auf");
             schalteRelaisGesichert(0U, true, "Cover-Auf");
-            break;
+            return true;
         case SH_COVER_STATE_MOVING_DOWN:
             stoppeFahrt("Cover-Ab");
             schalteRelaisGesichert(1U, true, "Cover-Ab");
-            break;
+            return true;
         default:
             logf("WARN", "Cover-CMD ignoriert: param1=%u", (unsigned)cmd.param1);
-            break;
+            return false;
     }
 }
 
-void verarbeiteCmd(const SmartHome::CmdPayload& cmd) {
+void verarbeiteCmd(const uint8_t* senderMac, const SmartHome::MsgHeader& header, const SmartHome::CmdPayload& cmd) {
+    if (istDoppeltesCmd(header.seq, cmd)) {
+        logf("WARN", "Duplikat-CMD erkannt (seq=%u)", (unsigned)header.seq);
+        if (header.flags & SH_FLAG_ACK_REQUEST) {
+            sendeAck(senderMac, header.seq, header.msg_type, SH_ACK_OK);
+        }
+        return;
+    }
+
+    bool erfolgreich = false;
     switch (cmd.cmd_type) {
         case SH_CMD_SET_RELAY:
-            verarbeiteRelayCmd(cmd);
+            logf(
+                "INFO",
+                "COMMAND_SET_RELAY empfangen: relay_%u=%s%s",
+                (unsigned)(cmd.param1 + 1U),
+                (cmd.param2 == 2U)
+                    ? "toggle"
+                    : ((cmd.param2 == 1U) ? "true" : "false"),
+                (header.flags & SH_FLAG_RETRANSMIT) ? " (retry)" : "");
+            erfolgreich = verarbeiteRelayCmd(cmd);
             break;
         case SH_CMD_COVER:
-            verarbeiteCoverCmd(cmd);
+            logf(
+                "INFO",
+                "COMMAND_COVER empfangen: state=%u%s",
+                (unsigned)cmd.param1,
+                (header.flags & SH_FLAG_RETRANSMIT) ? " (retry)" : "");
+            erfolgreich = verarbeiteCoverCmd(cmd);
             break;
         case SH_CMD_STATE_REQUEST:
             nodeStatus.state_report_offen = true;
+            erfolgreich = true;
             break;
         default:
             logf("WARN", "Unbekanntes CMD empfangen (cmd=%u)", (unsigned)cmd.cmd_type);
+            erfolgreich = false;
             break;
+    }
+
+    if (!erfolgreich) {
+        if (header.flags & SH_FLAG_ACK_REQUEST) {
+            sendeAck(senderMac, header.seq, header.msg_type, SH_ACK_ERROR);
+        }
+        return;
+    }
+
+    nodeStatus.letzter_cmd_gueltig = true;
+    nodeStatus.letzter_cmd_seq = header.seq;
+    nodeStatus.letzter_cmd_payload = cmd;
+
+    if (header.flags & SH_FLAG_ACK_REQUEST) {
+        sendeAck(senderMac, header.seq, header.msg_type, SH_ACK_OK);
     }
 }
 
@@ -438,7 +495,7 @@ void verarbeiteEspNowPaket(const uint8_t* senderMac, const uint8_t* daten, int l
 
         case SH_MSG_CMD:
             if (header->payload_len == sizeof(SmartHome::CmdPayload)) {
-                verarbeiteCmd(*reinterpret_cast<const SmartHome::CmdPayload*>(payload));
+                verarbeiteCmd(senderMac, *header, *reinterpret_cast<const SmartHome::CmdPayload*>(payload));
             }
             break;
 
