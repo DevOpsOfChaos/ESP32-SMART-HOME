@@ -64,3 +64,5 @@ private/
 *.bak
 tmp/
 archive/
+
+worktrees/
