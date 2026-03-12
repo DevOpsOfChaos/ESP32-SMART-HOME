@@ -1926,11 +1926,52 @@ const dashboardSharedStyle = String.raw`
         padding: 0.75rem;
     }
 
+    .sh-chart-stack {
+        display: grid;
+        gap: 0.72rem;
+    }
+
+    .sh-chart-panel {
+        border: 1px solid var(--sh-border-soft);
+        border-radius: 14px;
+        background: rgba(8, 12, 17, 0.74);
+        padding: 0.7rem;
+    }
+
+    .sh-chart-panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.55rem;
+    }
+
+    .sh-chart-panel-head strong {
+        display: block;
+        font-size: 0.92rem;
+    }
+
+    .sh-chart-panel-stats {
+        display: flex;
+        gap: 0.38rem;
+        flex-wrap: wrap;
+    }
+
     .sh-chart-meta {
         display: flex;
         gap: 0.45rem;
         flex-wrap: wrap;
         margin-bottom: 0.6rem;
+    }
+
+    .sh-chart-axis-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.55rem;
+        margin-top: 0.45rem;
+        font-size: 0.78rem;
+        color: var(--sh-text-muted);
     }
 
     .sh-chart-legend {
@@ -1952,6 +1993,53 @@ const dashboardSharedStyle = String.raw`
         height: 0.8rem;
         border-radius: 999px;
         display: inline-block;
+    }
+
+    .sh-chart-note,
+    .sh-chart-state {
+        display: grid;
+        gap: 0.18rem;
+        margin-top: 0.6rem;
+        border-radius: 12px;
+        border: 1px solid var(--sh-border-soft);
+        padding: 0.7rem 0.75rem;
+        background: rgba(14, 21, 29, 0.92);
+    }
+
+    .sh-chart-note {
+        margin-bottom: 0.65rem;
+    }
+
+    .sh-chart-note strong,
+    .sh-chart-state strong {
+        font-size: 0.86rem;
+    }
+
+    .sh-chart-note p,
+    .sh-chart-state p {
+        margin: 0;
+        color: var(--sh-text-muted);
+        font-size: 0.84rem;
+    }
+
+    .sh-chart-state.is-invalid {
+        border-color: rgba(176, 142, 68, 0.84);
+        background: linear-gradient(180deg, rgba(45, 35, 14, 0.94), rgba(27, 20, 7, 0.98));
+    }
+
+    .sh-chart-state.is-no-data {
+        border-color: rgba(57, 77, 97, 0.88);
+    }
+
+    .sh-chart-state.is-error {
+        border-color: rgba(143, 70, 70, 0.9);
+        background: linear-gradient(180deg, rgba(44, 20, 21, 0.95), rgba(26, 12, 13, 0.99));
+    }
+
+    .sh-chart-state.is-warning,
+    .sh-chart-note.is-warning {
+        border-color: rgba(93, 115, 57, 0.88);
+        background: linear-gradient(180deg, rgba(29, 37, 18, 0.95), rgba(18, 23, 11, 0.99));
     }
 
     .sh-code-block {
@@ -2448,7 +2536,7 @@ const deviceDetailTemplate = `
                         <p class="sh-muted">Nur für numerische Sensorzeitreihen mit Influx-Datenbasis.</p>
                     </div>
                 </div>
-                <div class="sh-chart-toolbar" v-if="detail.sensor_metrics && detail.sensor_metrics.length">
+                <div class="sh-chart-toolbar" v-if="detail.chart_metrics && detail.chart_metrics.length">
                     <div class="sh-field">
                         <label>Zeitraum</label>
                         <select class="sh-select" v-model="chartForm.range">
@@ -2463,6 +2551,9 @@ const deviceDetailTemplate = `
                         <label>Schrittweite</label>
                         <select class="sh-select" v-model="chartForm.step">
                             <option value="auto">Auto</option>
+                            <option value="raw">Rohdaten</option>
+                            <option value="10s">10s</option>
+                            <option value="30s">30s</option>
                             <option value="1m">1m</option>
                             <option value="5m">5m</option>
                             <option value="15m">15m</option>
@@ -2470,44 +2561,83 @@ const deviceDetailTemplate = `
                         </select>
                     </div>
                 </div>
-                <div class="sh-checkbox-list" v-if="detail.sensor_metrics && detail.sensor_metrics.length">
-                    <label class="sh-secondary-pill" v-for="metric in detail.sensor_metrics" :key="metric.key">
+                <div class="sh-checkbox-list" v-if="detail.chart_metrics && detail.chart_metrics.length">
+                    <label class="sh-secondary-pill" v-for="metric in detail.chart_metrics" :key="metric.key">
                         <input type="checkbox" :value="metric.key" v-model="chartForm.metrics" />
                         {{ metric.label }}
                     </label>
                 </div>
-                <div class="sh-control-row" v-if="detail.sensor_metrics && detail.sensor_metrics.length">
+                <div class="sh-control-row" v-if="detail.chart_metrics && detail.chart_metrics.length">
                     <button class="sh-btn" @click="loadChart">Diagramm laden</button>
                 </div>
-                <div class="sh-empty" v-else>Keine sensorischen Zeitreihen für dieses Gerät verfügbar.</div>
+                <div class="sh-empty" v-else>{{ detail.chart_unavailable_reason || "Keine chartbaren Sensorzeitreihen für dieses Gerät verfügbar." }}</div>
 
-                <div class="sh-chart-shell" v-if="chart.series && chart.series.length">
+                <div class="sh-chart-shell" v-if="chart.panels && chart.panels.length">
                     <div class="sh-chart-meta">
                         <span class="sh-chip">{{ chart.title }}</span>
                         <span class="sh-chip">{{ chart.range_label }}</span>
                         <span class="sh-chip">{{ chart.step_label }}</span>
                     </div>
-                    <svg viewBox="0 0 640 260" width="100%" height="260" role="img" aria-label="Sensorverlauf">
-                        <line x1="40" y1="20" x2="40" y2="220" stroke="#b9c7d5" stroke-width="1" />
-                        <line x1="40" y1="220" x2="620" y2="220" stroke="#b9c7d5" stroke-width="1" />
-                        <path
-                            v-for="series in chart.series"
-                            :key="'series-' + series.metric"
-                            :d="seriesPath(series)"
-                            fill="none"
-                            :stroke="series.color"
-                            stroke-width="2.2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round" />
-                    </svg>
-                    <div class="sh-chart-legend">
-                        <span v-for="series in chart.series" :key="'legend-' + series.metric">
-                            <i :style="{ background: series.color }"></i>
-                            {{ series.label }}: {{ series.last_value_text }}
-                        </span>
+                    <div class="sh-chart-note" v-if="chart.notice" :class="chart.status === 'sparse' ? 'is-warning' : ''">
+                        <strong>Hinweis</strong>
+                        <p>{{ chart.notice }}</p>
+                    </div>
+                    <div class="sh-chart-stack">
+                        <section class="sh-chart-panel" v-for="panel in chart.panels" :key="'detail-panel-' + panel.unit_key">
+                            <div class="sh-chart-panel-head">
+                                <div>
+                                    <strong>{{ panel.unit_label }}</strong>
+                                    <span class="sh-muted">{{ panel.series.length }} Kurve(n)</span>
+                                </div>
+                                <div class="sh-chart-panel-stats">
+                                    <span class="sh-chip">min {{ panel.min_label }}</span>
+                                    <span class="sh-chip">max {{ panel.max_label }}</span>
+                                    <span class="sh-chip">{{ panel.point_count }} Punkte</span>
+                                </div>
+                            </div>
+                            <svg viewBox="0 0 640 260" width="100%" height="260" role="img" aria-label="Sensorverlauf">
+                                <line x1="40" y1="20" x2="40" y2="220" stroke="#b9c7d5" stroke-width="1" />
+                                <line x1="40" y1="220" x2="620" y2="220" stroke="#b9c7d5" stroke-width="1" />
+                                <path
+                                    v-for="series in panel.series"
+                                    :key="'detail-series-' + panel.unit_key + '-' + series.metric"
+                                    :d="seriesPath(series)"
+                                    fill="none"
+                                    :stroke="series.color"
+                                    stroke-width="2.2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <g v-for="series in panel.series" :key="'detail-points-' + panel.unit_key + '-' + series.metric">
+                                    <circle
+                                        v-for="point in series.points"
+                                        :key="'detail-point-' + series.metric + '-' + point.ts_ms + '-' + point.value_num"
+                                        :cx="point.x"
+                                        :cy="point.y"
+                                        :r="series.has_drawable_line ? 2.8 : 4.2"
+                                        :fill="series.color"
+                                        stroke="#0f161f"
+                                        stroke-width="1.4">
+                                        <title>{{ pointTitle(point) }}</title>
+                                    </circle>
+                                </g>
+                            </svg>
+                            <div class="sh-chart-axis-row">
+                                <span>{{ chart.start_label }}</span>
+                                <span>{{ chart.end_label }}</span>
+                            </div>
+                            <div class="sh-chart-legend">
+                                <span v-for="series in panel.series" :key="'detail-legend-' + panel.unit_key + '-' + series.metric">
+                                    <i :style="{ background: series.color }"></i>
+                                    {{ series.label }}: {{ series.last_value_text }}<template v-if="!series.has_drawable_line"> · Einzelpunkt</template>
+                                </span>
+                            </div>
+                        </section>
                     </div>
                 </div>
-                <div class="sh-empty" v-else-if="chart.message">{{ chart.message }}</div>
+                <div class="sh-chart-state" v-else-if="chart.message" :class="chartStateClass(chart.status)">
+                    <strong>{{ chartStateTitle(chart.status) }}</strong>
+                    <p>{{ chart.message }}</p>
+                </div>
             </section>
 
             <div class="sh-detail-bottom-grid">
@@ -2568,7 +2698,7 @@ const deviceDetailTemplate = `
 export default {
     data() {
         return {
-            detail: { room_options: [], sensor_metrics: [] },
+            detail: { room_options: [], sensor_metrics: [], chart_metrics: [], chart_unavailable_reason: "" },
             chart: {},
             form: { display_name: "", room_name: "" },
             chartForm: { range: "24h", step: "auto", metrics: [] },
@@ -2588,6 +2718,7 @@ export default {
         reload() {
             this.removedMessage = "";
             this.autoChartLoaded = false;
+            this.chart = {};
             this.sendAction("load");
         },
         saveMeta() {
@@ -2610,6 +2741,7 @@ export default {
                 metrics: this.chartForm.metrics,
                 range: this.chartForm.range,
                 step: this.chartForm.step,
+                device_label: this.detail.device ? (this.detail.device.display_name || this.detail.device.device_id) : this.currentDeviceId(),
                 chart_target: "detail"
             });
         },
@@ -2621,12 +2753,50 @@ export default {
                 .map((point, index) => (index === 0 ? "M" : "L") + point.x + " " + point.y)
                 .join(" ");
         },
+        chartStateClass(status) {
+            return {
+                "is-invalid": status === "invalid_selection",
+                "is-no-data": status === "no_data",
+                "is-error": status === "query_error" || status === "render_error",
+                "is-warning": status === "sparse"
+            };
+        },
+        chartStateTitle(status) {
+            if (status === "invalid_selection") return "Ungültige Auswahl";
+            if (status === "no_data") return "Keine Influx-Daten";
+            if (status === "query_error") return "Influx-Fehler";
+            if (status === "render_error") return "Darstellungsproblem";
+            if (status === "sparse") return "Wenige Datenpunkte";
+            return "Diagrammstatus";
+        },
+        pointTitle(point) {
+            return [this.formatTimestamp(point && point.ts_ms), point && point.value_text].filter(Boolean).join(" · ");
+        },
+        formatTimestamp(tsMs) {
+            if (!Number.isFinite(tsMs)) return "";
+            const date = new Date(tsMs);
+            if (Number.isNaN(date.getTime())) return "";
+            return date.toLocaleString("de-DE", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            });
+        },
         applyDetailPayload(payload) {
+            const currentDeviceId = this.currentDeviceId();
+            if (payload.device && currentDeviceId && payload.device.device_id && payload.device.device_id !== currentDeviceId) {
+                return;
+            }
             this.detail = payload;
             this.form.display_name = payload.device ? (payload.device.display_name_input || payload.device.display_name || "") : "";
             this.form.room_name = payload.device ? (payload.device.room_name || "") : "";
-            if (!this.chartForm.metrics.length && Array.isArray(payload.sensor_metrics) && payload.sensor_metrics.length) {
-                this.chartForm.metrics = payload.sensor_metrics.slice(0, 2).map((item) => item.key);
+            const chartMetrics = Array.isArray(payload.chart_metrics) ? payload.chart_metrics : [];
+            const allowedMetrics = new Set(chartMetrics.map((item) => item.key));
+            this.chartForm.metrics = this.chartForm.metrics.filter((item) => allowedMetrics.has(item));
+            if (!this.chartForm.metrics.length && chartMetrics.length) {
+                this.chartForm.metrics = chartMetrics.slice(0, 2).map((item) => item.key);
             }
             if (!this.autoChartLoaded && this.chartForm.metrics.length) {
                 this.autoChartLoaded = true;
@@ -2645,11 +2815,14 @@ export default {
                     return;
                 }
                 if (payload.kind === "chart") {
+                    if (payload.chart && payload.chart.device_id && payload.chart.device_id !== this.currentDeviceId()) {
+                        return;
+                    }
                     this.chart = payload.chart || {};
                     return;
                 }
                 if (payload.kind === "detail_removed") {
-                    this.detail = { room_options: [], sensor_metrics: [] };
+                    this.detail = { room_options: [], sensor_metrics: [], chart_metrics: [], chart_unavailable_reason: "" };
                     this.chart = {};
                     this.removedMessage = payload.message || "Gerät entfernt.";
                 }
@@ -2703,6 +2876,9 @@ const chartsTemplate = `
                     <label>Schrittweite</label>
                     <select class="sh-select" v-model="chartForm.step">
                         <option value="auto">Auto</option>
+                        <option value="raw">Rohdaten</option>
+                        <option value="10s">10s</option>
+                        <option value="30s">30s</option>
                         <option value="1m">1m</option>
                         <option value="5m">5m</option>
                         <option value="15m">15m</option>
@@ -2720,35 +2896,75 @@ const chartsTemplate = `
                 <button class="sh-btn" @click="loadChart" :disabled="!selectedDeviceId">Diagramm laden</button>
                 <a class="sh-btn" v-if="selectedDeviceId" :href="'/dashboard/geraet?device=' + encodeURIComponent(selectedDeviceId)">Zum Gerätedetail</a>
             </div>
+            <div class="sh-empty" v-if="!deviceOptions.length">Noch keine chartbaren Influx-Zeitreihen sichtbar.</div>
         </div>
 
-        <div class="sh-chart-shell" v-if="chart.series && chart.series.length">
+        <div class="sh-chart-shell" v-if="chart.panels && chart.panels.length">
             <div class="sh-chart-meta">
                 <span class="sh-chip">{{ chart.title }}</span>
                 <span class="sh-chip">{{ chart.range_label }}</span>
                 <span class="sh-chip">{{ chart.step_label }}</span>
             </div>
-            <svg viewBox="0 0 640 260" width="100%" height="260" role="img" aria-label="Sensorverlauf">
-                <line x1="40" y1="20" x2="40" y2="220" stroke="#b9c7d5" stroke-width="1" />
-                <line x1="40" y1="220" x2="620" y2="220" stroke="#b9c7d5" stroke-width="1" />
-                <path
-                    v-for="series in chart.series"
-                    :key="'chart-series-' + series.metric"
-                    :d="seriesPath(series)"
-                    fill="none"
-                    :stroke="series.color"
-                    stroke-width="2.2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round" />
-            </svg>
-            <div class="sh-chart-legend">
-                <span v-for="series in chart.series" :key="'chart-legend-' + series.metric">
-                    <i :style="{ background: series.color }"></i>
-                    {{ series.label }}: {{ series.last_value_text }}
-                </span>
+            <div class="sh-chart-note" v-if="chart.notice" :class="chart.status === 'sparse' ? 'is-warning' : ''">
+                <strong>Hinweis</strong>
+                <p>{{ chart.notice }}</p>
+            </div>
+            <div class="sh-chart-stack">
+                <section class="sh-chart-panel" v-for="panel in chart.panels" :key="'chart-panel-' + panel.unit_key">
+                    <div class="sh-chart-panel-head">
+                        <div>
+                            <strong>{{ panel.unit_label }}</strong>
+                            <span class="sh-muted">{{ panel.series.length }} Kurve(n)</span>
+                        </div>
+                        <div class="sh-chart-panel-stats">
+                            <span class="sh-chip">min {{ panel.min_label }}</span>
+                            <span class="sh-chip">max {{ panel.max_label }}</span>
+                            <span class="sh-chip">{{ panel.point_count }} Punkte</span>
+                        </div>
+                    </div>
+                    <svg viewBox="0 0 640 260" width="100%" height="260" role="img" aria-label="Sensorverlauf">
+                        <line x1="40" y1="20" x2="40" y2="220" stroke="#b9c7d5" stroke-width="1" />
+                        <line x1="40" y1="220" x2="620" y2="220" stroke="#b9c7d5" stroke-width="1" />
+                        <path
+                            v-for="series in panel.series"
+                            :key="'chart-series-' + panel.unit_key + '-' + series.metric"
+                            :d="seriesPath(series)"
+                            fill="none"
+                            :stroke="series.color"
+                            stroke-width="2.2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round" />
+                        <g v-for="series in panel.series" :key="'chart-points-' + panel.unit_key + '-' + series.metric">
+                            <circle
+                                v-for="point in series.points"
+                                :key="'chart-point-' + series.metric + '-' + point.ts_ms + '-' + point.value_num"
+                                :cx="point.x"
+                                :cy="point.y"
+                                :r="series.has_drawable_line ? 2.8 : 4.2"
+                                :fill="series.color"
+                                stroke="#0f161f"
+                                stroke-width="1.4">
+                                <title>{{ pointTitle(point) }}</title>
+                            </circle>
+                        </g>
+                    </svg>
+                    <div class="sh-chart-axis-row">
+                        <span>{{ chart.start_label }}</span>
+                        <span>{{ chart.end_label }}</span>
+                    </div>
+                    <div class="sh-chart-legend">
+                        <span v-for="series in panel.series" :key="'chart-legend-' + panel.unit_key + '-' + series.metric">
+                            <i :style="{ background: series.color }"></i>
+                            {{ series.label }}: {{ series.last_value_text }}<template v-if="!series.has_drawable_line"> · Einzelpunkt</template>
+                        </span>
+                    </div>
+                </section>
             </div>
         </div>
-        <div class="sh-empty" v-else-if="chart.message">{{ chart.message }}</div>
+        <div class="sh-chart-state" v-else-if="chart.message" :class="chartStateClass(chart.status)">
+            <strong>{{ chartStateTitle(chart.status) }}</strong>
+            <p>{{ chart.message }}</p>
+        </div>
     </div>
 </template>
 
@@ -2770,8 +2986,8 @@ export default {
             return this.deviceOptions.find((device) => device.device_id === this.selectedDeviceId) || null;
         },
         metricOptions() {
-            return this.selectedDevice && Array.isArray(this.selectedDevice.sensor_metrics)
-                ? this.selectedDevice.sensor_metrics
+            return this.selectedDevice && Array.isArray(this.selectedDevice.chart_metrics)
+                ? this.selectedDevice.chart_metrics
                 : [];
         }
     },
@@ -2786,6 +3002,7 @@ export default {
                     action: "chart",
                     chart_target: "charts",
                     device_id: this.selectedDeviceId,
+                    device_label: this.selectedDevice ? this.selectedDevice.display_name : this.selectedDeviceId,
                     metrics: this.chartForm.metrics,
                     range: this.chartForm.range,
                     step: this.chartForm.step
@@ -2799,6 +3016,37 @@ export default {
             return series.points
                 .map((point, index) => (index === 0 ? "M" : "L") + point.x + " " + point.y)
                 .join(" ");
+        },
+        chartStateClass(status) {
+            return {
+                "is-invalid": status === "invalid_selection",
+                "is-no-data": status === "no_data",
+                "is-error": status === "query_error" || status === "render_error",
+                "is-warning": status === "sparse"
+            };
+        },
+        chartStateTitle(status) {
+            if (status === "invalid_selection") return "Ungültige Auswahl";
+            if (status === "no_data") return "Keine Influx-Daten";
+            if (status === "query_error") return "Influx-Fehler";
+            if (status === "render_error") return "Darstellungsproblem";
+            if (status === "sparse") return "Wenige Datenpunkte";
+            return "Diagrammstatus";
+        },
+        pointTitle(point) {
+            return [this.formatTimestamp(point && point.ts_ms), point && point.value_text].filter(Boolean).join(" · ");
+        },
+        formatTimestamp(tsMs) {
+            if (!Number.isFinite(tsMs)) return "";
+            const date = new Date(tsMs);
+            if (Number.isNaN(date.getTime())) return "";
+            return date.toLocaleString("de-DE", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            });
         }
     },
     watch: {
@@ -2808,22 +3056,30 @@ export default {
                 const payload = value?.payload || {};
                 if (payload.page && payload.page.key === "charts") {
                     this.dataset = payload;
+                    const knownDeviceIds = Array.isArray(payload.devices) ? payload.devices.map((device) => device.device_id) : [];
+                    if (this.selectedDeviceId && !knownDeviceIds.includes(this.selectedDeviceId)) {
+                        this.selectedDeviceId = "";
+                    }
                     if (!this.selectedDeviceId && Array.isArray(payload.devices) && payload.devices.length) {
                         this.selectedDeviceId = payload.devices[0].device_id;
                     }
-                    if (!this.chartForm.metrics.length && this.selectedDevice && Array.isArray(this.selectedDevice.sensor_metrics)) {
-                        this.chartForm.metrics = this.selectedDevice.sensor_metrics.slice(0, 2).map((item) => item.key);
+                    if (!this.chartForm.metrics.length && this.selectedDevice && Array.isArray(this.selectedDevice.chart_metrics)) {
+                        this.chartForm.metrics = this.selectedDevice.chart_metrics.slice(0, 2).map((item) => item.key);
                     }
                     return;
                 }
                 if (payload.kind === "chart") {
+                    if (payload.chart && payload.chart.device_id && payload.chart.device_id !== this.selectedDeviceId) {
+                        return;
+                    }
                     this.chart = payload.chart || {};
                 }
             }
         },
         selectedDeviceId() {
-            if (this.selectedDevice && Array.isArray(this.selectedDevice.sensor_metrics)) {
-                this.chartForm.metrics = this.selectedDevice.sensor_metrics.slice(0, 2).map((item) => item.key);
+            this.chart = {};
+            if (this.selectedDevice && Array.isArray(this.selectedDevice.chart_metrics)) {
+                this.chartForm.metrics = this.selectedDevice.chart_metrics.slice(0, 2).map((item) => item.key);
             } else {
                 this.chartForm.metrics = [];
             }
@@ -3432,6 +3688,79 @@ const dashboardCommonHelperLines = [
     'const humanizeKey = (key) => labelMap[key] || String(key || "")',
     '    .replace(/_/g, " ")',
     '    .replace(/\\b\\w/g, (match) => match.toUpperCase());',
+    'const normalizeMetricKey = (value) => normalizeString(value)',
+    '    .toLowerCase()',
+    '    .replace(/[^a-z0-9_]+/g, "_")',
+    '    .replace(/^_+|_+$/g, "");',
+    'const inferMetricUnit = (metric, explicitUnit = "") => {',
+    '    const unit = normalizeString(explicitUnit).toLowerCase();',
+    '    if (unit) return unit;',
+    '    if (/_01c$/i.test(metric)) return "0.1c";',
+    '    if (/_01pct$/i.test(metric)) return "0.1pct";',
+    '    if (/temp|_c$/i.test(metric)) return "c";',
+    '    if (/hum|humid|_pct$|pct$/i.test(metric)) return "pct";',
+    '    if (/eco2|co2/i.test(metric)) return "ppm";',
+    '    if (/tvoc|voc/i.test(metric)) return "ppb";',
+    '    if (/lux/i.test(metric)) return "lux";',
+    '    if (/battery_pct/i.test(metric)) return "pct";',
+    '    if (/battery_mv|_mv$/i.test(metric)) return "mv";',
+    '    if (/battery_v|_v$|volt/i.test(metric)) return "v";',
+    '    return "";',
+    '};',
+    'const formatMetricUnitLabel = (unit, metric) => {',
+    '    const normalizedUnit = inferMetricUnit(metric, unit);',
+    '    if (normalizedUnit === "0.1c" || normalizedUnit === "c") return "°C";',
+    '    if (normalizedUnit === "0.1pct" || normalizedUnit === "pct") return "%";',
+    '    if (normalizedUnit === "mv") return "mV";',
+    '    if (normalizedUnit === "v") return "V";',
+    '    if (normalizedUnit === "lux") return "lx";',
+    '    if (normalizedUnit === "ppm" || normalizedUnit === "ppb") return normalizedUnit;',
+    '    return normalizedUnit || "";',
+    '};',
+    'const isChartableMetric = (metric) => {',
+    '    const normalizedMetric = normalizeMetricKey(metric);',
+    '    if (!normalizedMetric) return false;',
+    '    if (/relay|switch|cover|output|fault|online|status|event|command|motion|contact|window/i.test(normalizedMetric)) return false;',
+    '    return /(temp|hum|humid|co2|eco2|tvoc|voc|lux|battery(_mv|_v|_pct)?|volt|pressure|current|power|energy|aqi|rain|water|flow|pm\\d*|soil|moist|uv)/i.test(normalizedMetric);',
+    '};',
+    'const finalizeChartMetricOptions = (items) => {',
+    '    const deduped = new Map();',
+    '    for (const item of items) {',
+    '        const normalizedKey = normalizeMetricKey(item && item.key);',
+    '        if (!normalizedKey || !isChartableMetric(normalizedKey)) continue;',
+    '        const current = deduped.get(normalizedKey);',
+    '        const label = normalizeString(item && item.label) || humanizeKey(normalizedKey);',
+    '        const unit = inferMetricUnit(normalizedKey, item && item.unit);',
+    '        if (!current) {',
+    '            deduped.set(normalizedKey, { key: normalizedKey, label, unit });',
+    '            continue;',
+    '        }',
+    '        if (!current.unit && unit) current.unit = unit;',
+    '        if (!current.label && label) current.label = label;',
+    '    }',
+    '    const baseItems = Array.from(deduped.values());',
+    '    const labelCounts = new Map();',
+    '    for (const item of baseItems) {',
+    '        const baseLabel = item.label || humanizeKey(item.key);',
+    '        labelCounts.set(baseLabel, (labelCounts.get(baseLabel) || 0) + 1);',
+    '    }',
+    '    return baseItems',
+    '        .map((item) => {',
+    '            const baseLabel = item.label || humanizeKey(item.key);',
+    '            const unitLabel = formatMetricUnitLabel(item.unit, item.key);',
+    '            const duplicateLabel = (labelCounts.get(baseLabel) || 0) > 1;',
+    '            return {',
+    '                key: item.key,',
+    '                label: duplicateLabel',
+    '                    ? unitLabel',
+    '                        ? baseLabel + " [" + unitLabel + "]"',
+    '                        : baseLabel + " [" + item.key + "]"',
+    '                    : baseLabel,',
+    '                unit: item.unit || null',
+    '            };',
+    '        })',
+    '        .sort((left, right) => left.label.localeCompare(right.label));',
+    '};',
     'const isRollladenDevice = (flatState, meta, deviceInfo = {}) => {',
     '    const coverMode = normalizeBool(flatState && flatState.cover_mode);',
     '    if (coverMode === true) return true;',
@@ -3536,15 +3865,7 @@ const dashboardCommonHelperLines = [
     '    }',
     '    const numberValue = normalizeNumber(value);',
     '    if (numberValue !== null) {',
-    '        if (!unit) {',
-    '            if (/_01c$/i.test(key)) unit = "0.1c";',
-    '            else if (/_01pct$/i.test(key)) unit = "0.1pct";',
-    '            else if (/battery_mv|_mv$/i.test(key)) unit = "mv";',
-    '            else if (/battery_pct|_pct$/i.test(key) || /position/i.test(key)) unit = "pct";',
-    '            else if (/lux/i.test(key)) unit = "lux";',
-    '            else if (/co2|eco2/i.test(key)) unit = "ppm";',
-    '            else if (/tvoc|voc/i.test(key)) unit = "ppb";',
-    '        }',
+    '        unit = inferMetricUnit(key, unit);',
     '        if (unit === "0.1c") return (numberValue / 10).toFixed(1) + " °C";',
     '        if (unit === "0.1pct") return (numberValue / 10).toFixed(1) + " %";',
     '        if (unit === "pct" || /_pct$/i.test(key) || /position/i.test(key)) return String(Math.round(numberValue)) + " %";',
@@ -3586,53 +3907,106 @@ const dashboardCommonHelperLines = [
     '    return flat;',
     '};',
     'const sortValues = (items) => items.sort((left, right) => left.label.localeCompare(right.label));',
-    'const buildChartSeries = (rows, chartTitle, rangeLabel, stepLabel) => {',
+    'const buildChartState = (status, message, extra = {}) => Object.assign({ status, message }, extra);',
+    'const formatChartTimeLabel = (tsMs, minTs, maxTs) => {',
+    '    const tsValue = normalizeNumber(tsMs);',
+    '    if (tsValue === null) return "-";',
+    '    const date = new Date(tsValue);',
+    '    if (Number.isNaN(date.getTime())) return "-";',
+    '    const minValue = normalizeNumber(minTs);',
+    '    const maxValue = normalizeNumber(maxTs);',
+    '    const spanMs = minValue !== null && maxValue !== null ? Math.max(0, maxValue - minValue) : 0;',
+    '    if (spanMs <= 36 * 60 * 60 * 1000) return date.toISOString().slice(11, 16) + "Z";',
+    '    return date.toISOString().slice(0, 16).replace("T", " ");',
+    '};',
+    'const buildChartSeries = (rows, chartTitle, rangeLabel, stepLabel, deviceId) => {',
     '    const grouped = new Map();',
     '    for (const row of rows) {',
-    '        const metric = normalizeString(row.metric);',
+    '        const metric = normalizeMetricKey(row.metric);',
     '        const valueNum = normalizeNumber(row.value_num);',
     '        const tsText = normalizeString(row.ts);',
-    '        if (!metric || valueNum === null || !tsText) continue;',
+    '        const tsMs = Date.parse(tsText);',
+    '        if (!metric || valueNum === null || !tsText || Number.isNaN(tsMs)) continue;',
     '        if (!grouped.has(metric)) {',
-    '            grouped.set(metric, { metric, label: humanizeKey(metric), unit: normalizeString(row.unit) || null, points: [] });',
+    '            grouped.set(metric, { metric, label: humanizeKey(metric), unit: inferMetricUnit(metric, row.unit), points: [] });',
     '        }',
-    '        grouped.get(metric).points.push({ ts_ms: Date.parse(tsText), raw_value: valueNum });',
+    '        grouped.get(metric).points.push({ ts_ms: tsMs, raw_value: valueNum });',
+    '    }',
+    '    if (!rows.length) {',
+    '        return buildChartState("no_data", "Keine Influx-Daten für die aktuelle Auswahl.", { title: chartTitle, range_label: rangeLabel, step_label: stepLabel, device_id: deviceId || "" });',
     '    }',
     '    const series = Array.from(grouped.values()).filter((item) => item.points.length);',
     '    if (!series.length) {',
-    '        return { title: chartTitle, range_label: rangeLabel, step_label: stepLabel, message: "Keine Influx-Daten für die aktuelle Auswahl." };',
+    '        return buildChartState("render_error", "Influx lieferte Daten, aber keine auswertbaren Diagrammpunkte.", { title: chartTitle, range_label: rangeLabel, step_label: stepLabel, device_id: deviceId || "" });',
     '    }',
     '    const allPoints = series.flatMap((item) => item.points);',
     '    const minTs = Math.min(...allPoints.map((point) => point.ts_ms));',
     '    const maxTs = Math.max(...allPoints.map((point) => point.ts_ms));',
-    '    const minValue = Math.min(...allPoints.map((point) => point.raw_value));',
-    '    const maxValue = Math.max(...allPoints.map((point) => point.raw_value));',
     '    const tsRange = maxTs === minTs ? 1 : maxTs - minTs;',
-    '    const valueRange = maxValue === minValue ? 1 : maxValue - minValue;',
+    '    const panelsByUnit = new Map();',
+    '    for (const item of series) {',
+    '        const unitKey = inferMetricUnit(item.metric, item.unit) || "unitless";',
+    '        if (!panelsByUnit.has(unitKey)) {',
+    '            panelsByUnit.set(unitKey, { unit_key: unitKey, unit_label: formatMetricUnitLabel(unitKey, item.metric) || "ohne Einheit", series: [] });',
+    '        }',
+    '        panelsByUnit.get(unitKey).series.push(item);',
+    '    }',
+    '    const panels = Array.from(panelsByUnit.values()).map((panel, panelIndex) => {',
+    '        const panelPoints = panel.series.flatMap((item) => item.points);',
+    '        const minValue = Math.min(...panelPoints.map((point) => point.raw_value));',
+    '        const maxValue = Math.max(...panelPoints.map((point) => point.raw_value));',
+    '        const valuePadding = maxValue === minValue',
+    '            ? Math.max(Math.abs(maxValue) * 0.08, 1)',
+    '            : Math.max((maxValue - minValue) * 0.08, 0.5);',
+    '        const scaleMin = minValue - valuePadding;',
+    '        const scaleMax = maxValue + valuePadding;',
+    '        const valueRange = scaleMax - scaleMin;',
+    '        const panelSeries = panel.series',
+    '            .sort((left, right) => left.label.localeCompare(right.label))',
+    '            .map((item, index) => ({',
+    '                metric: item.metric,',
+    '                label: item.label,',
+    '                unit: item.unit || null,',
+    '                color: colorPalette[(panelIndex + index) % colorPalette.length],',
+    '                point_count: item.points.length,',
+    '                has_drawable_line: item.points.length > 1,',
+    '                last_value_text: formatValueText(item.metric, item.points[item.points.length - 1].raw_value, item.unit, "sensor"),',
+    '                points: item.points',
+    '                    .sort((left, right) => left.ts_ms - right.ts_ms)',
+    '                    .map((point) => ({',
+    '                        x: minTs === maxTs ? 330 : 40 + ((point.ts_ms - minTs) / tsRange) * 580,',
+    '                        y: 220 - ((point.raw_value - scaleMin) / valueRange) * 200,',
+    '                        value_text: formatValueText(item.metric, point.raw_value, item.unit, "sensor"),',
+    '                        value_num: point.raw_value,',
+    '                        ts_ms: point.ts_ms',
+    '                    }))',
+    '            }));',
+    '        return {',
+    '            unit_key: panel.unit_key,',
+    '            unit_label: panel.unit_label,',
+    '            point_count: panelPoints.length,',
+    '            min_label: formatValueText(panel.unit_key, minValue, panel.unit_key, "sensor"),',
+    '            max_label: formatValueText(panel.unit_key, maxValue, panel.unit_key, "sensor"),',
+    '            series: panelSeries',
+    '        };',
+    '    });',
+    '    const hasDrawableLine = panels.some((panel) => panel.series.some((item) => item.has_drawable_line));',
+    '    const sparseSeriesCount = panels.reduce((count, panel) => count + panel.series.filter((item) => !item.has_drawable_line).length, 0);',
+    '    const notices = [];',
+    '    if (panels.length > 1) notices.push("Mehrere Einheiten werden getrennt dargestellt.");',
+    '    if (!hasDrawableLine) notices.push("Im gewählten Raster gibt es nur Einzelpunkte. Für Linien kleinere Schrittweite oder Rohdaten wählen.");',
+    '    else if (sparseSeriesCount > 0) notices.push("Einzelne Kurven liefern im gewählten Raster nur Einzelpunkte.");',
     '    return {',
+    '        status: hasDrawableLine ? "ok" : "sparse",',
     '        title: chartTitle,',
     '        range_label: rangeLabel,',
     '        step_label: stepLabel,',
-    '        min_ts: minTs,',
-    '        max_ts: maxTs,',
-    '        min_val: minValue,',
-    '        max_val: maxValue,',
-    '        series: series.map((item, index) => ({',
-    '            metric: item.metric,',
-    '            label: item.label,',
-    '            unit: item.unit,',
-    '            color: colorPalette[index % colorPalette.length],',
-    '            last_value_text: formatValueText(item.metric, item.points[item.points.length - 1].raw_value, item.unit, "sensor"),',
-    '            points: item.points',
-    '                .sort((left, right) => left.ts_ms - right.ts_ms)',
-    '                .map((point) => ({',
-    '                    x: 40 + ((point.ts_ms - minTs) / tsRange) * 580,',
-    '                    y: 220 - ((point.raw_value - minValue) / valueRange) * 200,',
-    '                    value_text: formatValueText(item.metric, point.raw_value, item.unit, "sensor"),',
-    '                    value_num: point.raw_value,',
-    '                    ts_ms: point.ts_ms',
-    '                }))',
-    '        }))',
+    '        start_label: formatChartTimeLabel(minTs, minTs, maxTs),',
+    '        end_label: formatChartTimeLabel(maxTs, minTs, maxTs),',
+    '        device_id: deviceId || "",',
+    '        panels,',
+    '        notice: notices.join(" "),',
+    '        panel_count: panels.length',
     '    };',
     '};'
 ];
@@ -3775,6 +4149,8 @@ for (const row of rows) {
             primary_values: [],
             secondary_values: [],
             sensor_metrics: [],
+            chart_metrics: [],
+            chart_unavailable_reason: "",
             controls: null,
             detail_url: "/dashboard/geraet?device=" + encodeURIComponent(row.device_id),
             info_rows: []
@@ -3801,6 +4177,7 @@ const devices = Array.from(byDevice.values()).map((device) => {
     const capabilities = device.capabilities.slice();
     const seenKeys = new Set();
     const sensorMetrics = [];
+    const chartMetricCandidates = [];
     const primaryValues = [];
     const secondaryValues = [];
 
@@ -3812,6 +4189,7 @@ const devices = Array.from(byDevice.values()).map((device) => {
         if (capability.role === "sensor") {
             primaryValues.push(row);
             sensorMetrics.push({ key: capability.key, label: humanizeKey(capability.key), unit: capability.unit || null });
+            chartMetricCandidates.push({ key: capability.key, label: row.label, unit: capability.unit || null });
         } else {
             secondaryValues.push(row);
         }
@@ -3827,6 +4205,7 @@ const devices = Array.from(byDevice.values()).map((device) => {
             primaryValues.push(row);
             if (!/cover_position/i.test(key)) {
                 sensorMetrics.push({ key, label: humanizeKey(key), unit: null });
+                chartMetricCandidates.push({ key, label: row.label, unit: null });
             }
         } else {
             secondaryValues.push(row);
@@ -3852,6 +4231,10 @@ const devices = Array.from(byDevice.values()).map((device) => {
     device.highlight_values = device.primary_values.slice(0, controlKind === "cover" ? 1 : 3);
     device.secondary_values = filterSecondaryValues(secondaryValues, { controlKind }).slice(0, 6);
     device.sensor_metrics = sensorMetrics.filter((item, index, list) => list.findIndex((current) => current.key === item.key) === index);
+    device.chart_metrics = finalizeChartMetricOptions(chartMetricCandidates);
+    device.chart_unavailable_reason = device.sensor_metrics.length > 0 && !device.chart_metrics.length
+        ? "Dieses Gerät meldet Sensorwerte, aber keine im aktuellen Influx-Schema chartbaren Zeitreihen."
+        : "";
     device.summary_label = controlKind === "relay"
         ? device.controls.summary_label
         : controlKind === "cover"
@@ -3928,7 +4311,7 @@ if (view === "devices") {
 } else if (view === "charts") {
     page.title = "Diagramme";
     page.show_controls = false;
-    filteredDevices = devices.filter((device) => device.sensor_metrics.length > 0);
+    filteredDevices = devices.filter((device) => device.chart_metrics.length > 0);
 } else {
     page.title = "Übersicht";
 }
@@ -4068,7 +4451,7 @@ const buildDeviceDetailQueryFunc = String.raw`
 ${toSqlLines.join("\n")}
 const deviceId = typeof msg.detailDeviceId === "string" ? msg.detailDeviceId.trim() : "";
 if (!deviceId) {
-    msg.payload = { kind: "detail", device: null, room_options: [], sensor_metrics: [], technical_rows: [], config_rows: [] };
+    msg.payload = { kind: "detail", device: null, room_options: [], sensor_metrics: [], chart_metrics: [], chart_unavailable_reason: "", technical_rows: [], config_rows: [] };
     return msg;
 }
 
@@ -4180,6 +4563,8 @@ const result = {
     kind: "detail",
     device: null,
     sensor_metrics: [],
+    chart_metrics: [],
+    chart_unavailable_reason: "",
     technical_rows: [],
     config_rows: [],
     room_options: []
@@ -4215,6 +4600,7 @@ const capabilities = rows
     }));
 
 const sensorMetrics = [];
+const chartMetricCandidates = [];
 const primaryValues = [];
 const secondaryValues = [];
 const seenKeys = new Set();
@@ -4230,6 +4616,7 @@ for (const capability of capabilities) {
     if (capability.role === "sensor") {
         primaryValues.push(row);
         sensorMetrics.push({ key: capability.key, label: row.label, unit: capability.unit || null });
+        chartMetricCandidates.push({ key: capability.key, label: row.label, unit: capability.unit || null });
     } else {
         secondaryValues.push(row);
     }
@@ -4242,6 +4629,7 @@ for (const [key, value] of Object.entries(flatState)) {
         primaryValues.push(row);
         if (!/cover_position/i.test(key)) {
             sensorMetrics.push({ key, label: row.label, unit: null });
+            chartMetricCandidates.push({ key, label: row.label, unit: null });
         }
     } else {
         secondaryValues.push(row);
@@ -4302,6 +4690,10 @@ result.device = {
 };
 
 result.sensor_metrics = sensorMetrics.filter((item, index, list) => list.findIndex((current) => current.key === item.key) === index);
+result.chart_metrics = finalizeChartMetricOptions(chartMetricCandidates);
+result.chart_unavailable_reason = result.sensor_metrics.length > 0 && !result.chart_metrics.length
+    ? "Dieses Gerät meldet Sensorwerte, aber keine im aktuellen Influx-Schema chartbaren Zeitreihen."
+    : "";
 result.technical_rows = [
     { key: "first_seen_at", label: "Erstkontakt", value_text: isoLabel(deviceRow.first_seen_at) },
     { key: "last_meta_at", label: "Letztes Meta", value_text: isoLabel(deviceRow.last_meta_at) },
@@ -4844,31 +5236,54 @@ return msg;
 `;
 
 const buildChartRequestFunc = String.raw`
+${dashboardCommonHelperLines.join("\n")}
 const request = msg.payload || {};
 const deviceId = typeof request.device_id === "string" ? request.device_id.trim() : "";
-const metrics = Array.isArray(request.metrics) ? request.metrics.filter((item) => typeof item === "string" && item.trim()) : [];
+const deviceLabel = normalizeString(request.device_label) || deviceId;
+const requestedMetrics = Array.isArray(request.metrics) ? request.metrics.filter((item) => typeof item === "string" && item.trim()) : [];
+const metrics = Array.from(new Set(requestedMetrics
+    .map((item) => normalizeMetricKey(item))
+    .filter((item) => item && isChartableMetric(item))));
 msg.chartTarget = request.chart_target === "charts" ? "charts" : "detail";
 if (!deviceId || !metrics.length) {
-    msg.payload = { kind: "chart", chart: { message: "Bitte Gerät und mindestens eine Metrik wählen." } };
+    msg.payload = {
+        kind: "chart",
+        chart: buildChartState(
+            "invalid_selection",
+            !deviceId
+                ? "Bitte zuerst ein Gerät wählen."
+                : requestedMetrics.length
+                    ? "Die ausgewählte Metrik ist im aktuellen Influx-Schema nicht chartbar."
+                    : "Bitte mindestens eine Metrik wählen.",
+            { device_id: deviceId }
+        )
+    };
     return [null, msg];
 }
 const rangeMap = { "1h": "-1h", "6h": "-6h", "24h": "-24h", "7d": "-7d", "30d": "-30d" };
-const autoStepMap = { "1h": "1m", "6h": "5m", "24h": "15m", "7d": "1h", "30d": "1h" };
+const autoStepMap = { "1h": "raw", "6h": "raw", "24h": "raw", "7d": "15m", "30d": "1h" };
+const allowedSteps = new Set(["raw", "10s", "30s", "1m", "5m", "15m", "1h"]);
 const rangeKey = Object.prototype.hasOwnProperty.call(rangeMap, request.range) ? request.range : "24h";
-const stepKey = request.step && request.step !== "auto" ? request.step : autoStepMap[rangeKey];
+const requestedStep = typeof request.step === "string" ? request.step.trim() : "auto";
+const stepKey = requestedStep && requestedStep !== "auto" && allowedSteps.has(requestedStep) ? requestedStep : autoStepMap[rangeKey];
 const escapedDeviceId = deviceId.replace(/"/g, '\\"');
 const metricFilter = metrics.map((metric) => 'r.metric == "' + String(metric).replace(/"/g, '\\"') + '"').join(" or ");
-const fluxQuery = [
+const fluxQueryLines = [
     'from(bucket: "' + String(env.get("INFLUX_BUCKET") || "smarthome").replace(/"/g, '\\"') + '")',
     '  |> range(start: ' + rangeMap[rangeKey] + ')',
-    '  |> filter(fn: (r) => r._measurement == "smarthome_sensor" and r.node_id == "' + escapedDeviceId + '" and (' + metricFilter + '))',
-    '  |> aggregateWindow(every: ' + stepKey + ', fn: mean, createEmpty: false)',
+    '  |> filter(fn: (r) => r._measurement == "smarthome_sensor" and r.node_id == "' + escapedDeviceId + '" and (' + metricFilter + '))'
+];
+if (stepKey !== "raw") {
+    fluxQueryLines.push('  |> aggregateWindow(every: ' + stepKey + ', fn: mean, createEmpty: false)');
+}
+fluxQueryLines.push(
     '  |> keep(columns: ["_time", "_value", "metric", "unit"])',
     '  |> sort(columns: ["_time"])'
-].join("\n");
-msg.chartTitle = deviceId;
+);
+msg.chartTitle = deviceLabel;
+msg.chartDeviceId = deviceId;
 msg.chartRangeLabel = rangeKey;
-msg.chartStepLabel = stepKey;
+msg.chartStepLabel = stepKey === "raw" ? "roh" : stepKey;
 msg.method = "POST";
 msg.url = (env.get("INFLUX_URL") || "http://influxdb:8086") + "/api/v2/query?org=" + encodeURIComponent(env.get("INFLUX_ORG") || "");
 msg.headers = {
@@ -4877,7 +5292,7 @@ msg.headers = {
     Accept: "application/csv"
 };
 msg.payload = JSON.stringify({
-    query: fluxQuery,
+    query: fluxQueryLines.join("\n"),
     dialect: {
         header: true,
         delimiter: ",",
@@ -4904,7 +5319,15 @@ const extractChartErrorMessage = () => {
 };
 const chartErrorMessage = extractChartErrorMessage();
 if (chartErrorMessage) {
-    msg.payload = { kind: "chart", chart: { title: msg.chartTitle || "Chart", range_label: msg.chartRangeLabel || "-", step_label: msg.chartStepLabel || "-", message: chartErrorMessage } };
+    msg.payload = {
+        kind: "chart",
+        chart: buildChartState("query_error", chartErrorMessage, {
+            title: msg.chartTitle || "Chart",
+            range_label: msg.chartRangeLabel || "-",
+            step_label: msg.chartStepLabel || "-",
+            device_id: msg.chartDeviceId || ""
+        })
+    };
     return msg;
 }
 const csv = (
@@ -4915,12 +5338,12 @@ const csv = (
             : ""
 ).trim();
 if (!csv) {
-    msg.payload = { kind: "chart", chart: { message: "Keine Influx-Daten für die aktuelle Auswahl." } };
+    msg.payload = { kind: "chart", chart: buildChartState("no_data", "Keine Influx-Daten für die aktuelle Auswahl.", { device_id: msg.chartDeviceId || "" }) };
     return msg;
 }
-const lines = csv.split(/\\r?\\n/).filter((line) => line.trim());
+const lines = csv.split(/\r?\n/).filter((line) => line.trim());
 if (!lines.length) {
-    msg.payload = { kind: "chart", chart: { message: "Keine Influx-Daten für die aktuelle Auswahl." } };
+    msg.payload = { kind: "chart", chart: buildChartState("no_data", "Keine Influx-Daten für die aktuelle Auswahl.", { device_id: msg.chartDeviceId || "" }) };
     return msg;
 }
 const splitCsvLine = (line) => {
@@ -4951,7 +5374,7 @@ const splitCsvLine = (line) => {
 const relevantLines = lines.filter((line) => !line.startsWith("#"));
 const headerLine = relevantLines.find((line) => line.includes("_time") && line.includes("_value") && line.includes("metric"));
 if (!headerLine) {
-    msg.payload = { kind: "chart", chart: { message: "Influx-Antwort ohne lesbaren CSV-Header." } };
+    msg.payload = { kind: "chart", chart: buildChartState("render_error", "Influx-Antwort ohne lesbaren CSV-Header.", { device_id: msg.chartDeviceId || "" }) };
     return msg;
 }
 const headers = splitCsvLine(headerLine);
@@ -4971,7 +5394,7 @@ const chartRows = relevantLines
 });
 msg.payload = {
     kind: "chart",
-    chart: buildChartSeries(chartRows, msg.chartTitle || "Chart", msg.chartRangeLabel || "-", msg.chartStepLabel || "-")
+    chart: buildChartSeries(chartRows, msg.chartTitle || "Chart", msg.chartRangeLabel || "-", msg.chartStepLabel || "-", msg.chartDeviceId || "")
 };
 return msg;
 `;

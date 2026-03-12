@@ -1,0 +1,76 @@
+Stand: beta38
+Datei: beta38_dashboard_diagramme_echte_influx_anbindung.txt
+Datum: 2026-03-12
+Autor: Codex
+
+1. Anlass
+- Die reale Dashboard-V1 hatte fuer Diagramme bereits die Seiten, Geraetedetail-Einbindung und Influx-Query-Steuerung.
+- Praktisch war der Pfad aber nicht ehrlich nutzbar:
+  - die Diagramm-Query meldete oft "keine Daten", obwohl Influx reale Punkte hatte
+  - unterschiedliche Metriken wie `battery_pct` und `battery_mv` erschienen mit demselben Label
+  - gemischte Einheiten lagen auf derselben Achse und waren damit fachlich irrefuehrend
+  - Einzelpunkte oder konstante Werte konnten im SVG optisch praktisch verschwinden
+
+2. Tatsaechliche Ursache
+- Die zentrale Ursache fuer den falschen "Keine Influx-Daten"-Zustand lag im generierten Node-RED-Parser:
+  - `parseChartResponse` teilte die Influx-CSV auf `/\\r?\\n/` statt auf echte Zeilenumbrueche
+  - dadurch blieb die gesamte CSV eine einzige Zeile
+  - der Header wurde zwar "gefunden", aber die eigentlichen Datenzeilen wurden nie sauber extrahiert
+  - Ergebnis: vorhandene Influx-Daten fielen downstream als leere Diagrammreihe aus
+- Zusaetzliche echte Nutzbarkeitsprobleme:
+  - Chart-Metriken waren nicht sauber auf die write-seitige Influx-Metrik-Normalisierung abgestimmt
+  - mehrere Einheiten wurden in einer einzigen Y-Skala zusammengeworfen
+  - Einzelpunkte und flache Linien hatten keine sichtbaren Marker bzw. keinen vertikalen Puffer
+
+3. Aenderung
+- Aktualisiert:
+  - `server/nodered/build-flows.js`
+- Umgesetzt:
+  - CSV-Parser im Diagrammpfad auf echte Zeilentrennung korrigiert
+  - Chart-Metrik-Auswahl an die reale Influx-Metrik-Normalisierung und das chartbare Schema angeglichen
+  - mehrdeutige Metriklabels im Picker aufgeloest, z. B. `Batterie [%]` vs. `Batterie [mV]`
+  - Schrittweiten erweitert um `Rohdaten`, `10s` und `30s`
+  - Auto-Schritt fuer kurze Zeitraeume auf ehrliche Rohdaten umgestellt statt versteckter Voraggregation
+  - gemischte Einheiten technisch korrekt in getrennte Diagramm-Panels aufgeteilt
+  - SVG-Darstellung fuer sparse Daten verbessert:
+  - sichtbare Punktmarker
+  - gepolsterte Y-Skala fuer konstante Werte
+  - brauchbare Einzelpunkt-/Sparse-Hinweise statt "unsichtbarer Erfolg"
+  - Statusbehandlung klar getrennt fuer:
+  - ungueltige Auswahl
+  - keine Influx-Daten
+  - Query-/Renderproblem
+  - sparse/Einzelpunktfall
+  - Detailseite gegen stale Dashboard-Nachrichten gehaertet, damit beim Direktaufruf nicht kurz ein anderes Geraet als Kontext haengenbleibt
+
+4. Wirkung
+- Der reale Diagrammpfad zeigt jetzt Influx-Daten wieder als tatsaechliche Kurven bzw. sichtbare Punkte an.
+- Das Geraetedetail kann fuer chartbare reale Sensorgeraete direkt Diagramme laden.
+- Die globale Diagrammseite arbeitet mit denselben ehrlichen Metrik- und Influx-Regeln.
+- Mehrere Sensoren koennen gleichzeitig gewaehlt werden; bei gemischten Einheiten werden sie getrennt statt fachlich falsch uebereinander gelegt.
+- Wenn wirklich keine passenden Punkte existieren, bleibt der Zustand klar als `Keine Influx-Daten` erkennbar.
+
+5. Grenzen
+- Die Diagramme bleiben auf die bereits reale Influx-Zeitreihenbasis beschraenkt; nicht jeder sichtbare UI-Wert ist automatisch historisiert.
+- Ein echter Render-/Konfigurationsfehler wurde im finalen Live-Lauf nicht kuenstlich provoziert; der Statuspfad dafuer ist implementiert, aber nicht als eigener Fehlerlauf nachgewiesen.
+- Die globale Diagrammseite laedt weiterhin nicht automatisch nach jedem Geraetewechsel; das bleibt bewusst ueber den expliziten `Diagramm laden`-Trigger steuerbar.
+- Es wurde bewusst kein Server-Architekturumbau und kein Firmware-Eingriff gemacht.
+
+6. Pruefungen
+- Lokal ausgefuehrt:
+  - `node server/nodered/build-flows.js > $null`
+  - `docker compose up -d --build nodered`
+  - `docker compose ps`
+  - `docker compose logs --tail=40 nodered`
+- Browser-/Live-Pruefung:
+  - realer Detailpfad `/dashboard/geraet?device=bat_sen_01`
+  - reale globale Diagrammseite `/dashboard/diagramme` mit `BAT-SEN Base`
+  - reale globale Diagrammseite `/dashboard/diagramme` mit `NET-SEN Base`
+  - ungueltige Auswahl auf `/dashboard/diagramme` durch Laden ohne ausgewaehlte Metrik
+  - `Keine Influx-Daten`-Zustand auf `/dashboard/diagramme` mit `Fenster Batterie` im 1h-Fenster
+- Beobachtet:
+  - `bat_sen_01` zeigt reale Influx-Verlaeufe fuer `battery_pct` und `battery_mv` im Detailpfad
+  - `BAT-SEN Base` zeigt dieselben realen Influx-Daten auf der globalen Diagrammseite
+  - `NET-SEN Base` zeigt reale Temperatur-/Feuchtekurven auf der globalen Diagrammseite
+  - die Statuszustaende `Ungueltige Auswahl` und `Keine Influx-Daten` sind im Browser unterscheidbar sichtbar
+  - Node-RED startet nach dem Rebuild healthy ohne Flow-Startfehler
