@@ -1,113 +1,102 @@
-# SmartHome ESP32 – Neubasis
+# SmartHome ESP32
 
-Öffentliche Neubasis für das Technikerprojekt.
+Dieses Repository enthaelt die aktive Firmware- und Serverbasis fuer ein lokal betriebenes Smart-Home-System auf ESP32. Im Repo liegen der ESP32-C3-Master, die aktuellen Basis-Nodes, der lokale Server-Stack und die Nachweis- und Protokolldoku.
 
-## Worum es hier geht
-Dieses Repository ist **nicht** die Fortsetzung des alten Projektstands.
-Es ist die neue, veröffentlichbare Arbeitsbasis für:
+## System in einem Satz
 
-- Firmware der vier Basisgeräte
-- Master-Bridge auf ESP32-C3
-- spätere Serverseite auf Raspberry Pi
-- Dokumentation, Testplanung und Änderungsprotokolle
-- saubere GitHub- und Secrets-Trennung
+ESP32-Nodes sprechen nur ESP-NOW, der `master` bridged diese Funkebene nach MQTT, und der `server` arbeitet nur oberhalb dieses Masters mit Mosquitto, Node-RED, InfluxDB und SQLite.
 
-## Aktueller belegter Stand
-Stand 2026-03-11:
-- reale Bring-up- und MQTT-Minimalstrecke `master <-> net_erl_01` ist im Repo dokumentiert
-- die offiziellen serverseitigen Rueckwege fuer `net_erl_01` und `net_zrl_01` ueber Node-RED sind belegt
-- das SQLite-Audit fuer ausgehende serverseitige `cmd/set`-Publishes ist belegt
-- die kombinierten Live-Nachweise im aktuellen Repo-Stand sind fuer diese beiden Pilotpfade belegt:
-  `Node-RED -> cmd/set -> audit_log egress -> Master -> net_erl|net_zrl -> MQTT state -> device_last_state`
-- die Server-V1 hat zusaetzlich getrennte Nachweise fuer MQTT-Ingest und Influx-Schreibpfad
-- der offizielle `net_sen_01`-Servernachweis auf dem real belegten DHT22-Pfad `GPIO6` ist im aktuellen Repo-Stand jetzt ebenfalls dokumentiert
-- `bat_sen_01` bleibt als einzige Basisgeraete-Luecke ohne eigenen realen Hardware-Nachweis offen
-- offen bleiben ACK/Retry, Langzeitstabilitaet, Offline-Timeout, weitere Basisgeraete und ein vollstaendiger Gesamtprojektnachweis
-- belegter Ist-Stand: `docs/14_test_und_nachweisstand.md`
-- Detailblatt der Minimalstrecke: `docs/14_minimalstrecke_net_erl_master.md`
-- verbindlicher Hardware-Pinstandard: `docs/15_hardware_pinstandard.md`
+## Architektur
 
-## Projektprinzip
-Das System bleibt strikt in drei Ebenen getrennt:
+```text
+net_erl / net_zrl / net_sen / bat_sen
+              -- ESP-NOW -->
+        master (ESP32-C3 bridge)
+              -- MQTT -->
+server (Mosquitto + Node-RED + InfluxDB + SQLite)
+```
 
-1. **Nodes**
-   - sprechen nur ESP-NOW
-   - kennen weder MQTT noch Node-RED
-   - führen lokale Grundlogik aus
+- Nodes nutzen ausschliesslich ESP-NOW.
+- MQTT existiert nur zwischen `master` und `server`.
+- Der `master` ist die einzige Bridge zwischen Funkebene und Serverebene.
+- Der `server` spricht nie direkt mit Nodes.
+- Dashboard, Automationen und Datenhaltung laufen serverseitig.
+- `status` und `state` bleiben im MQTT-Vertrag getrennt.
 
-2. **Master**
-   - ESP32-C3
-   - Bridge zwischen ESP-NOW und MQTT
-   - Registry, ACK/Retry, Availability, Konfigurationsweitergabe
+## Aktuelle Geraetebasis
 
-3. **Server**
-   - MQTT, Node-RED, spätere Visualisierung und Automationen
-   - kein direkter Zugriff auf Nodes
+- `master`: ESP32-C3-Bridge fuer ESP-NOW <-> MQTT, Registry, ACK/Retry-Weiterleitung und Online/Offline-Erkennung.
+- `net_erl`: netzbetriebener Ein-Relais-Node fuer einfache Schaltpfade.
+- `net_zrl`: netzbetriebener Zwei-Relais-Node; allgemeine Zwei-Relais-Basis, Cover-Logik nur im Cover-Modus.
+- `net_sen`: netzbetriebener Sensor-Node; der aktuell belegte reale Sensorpfad nutzt DHT22 auf `GPIO6`.
+- `bat_sen`: batteriebetriebener Sensor-/Event-Node; als Buildbasis vorhanden, aber noch ohne eigenen realen Hardware-Nachweis.
 
-## Feste Basisgeräte
-- `master`
-- `net_erl`
-- `net_zrl`
-- `net_sen`
-- `bat_sen`
+Alle fuenf Geraete liegen als PlatformIO-Environments unter `firmware/platformio.ini`.
 
-Sondergeräte werden nicht als neue Grundarchitekturen gebaut, sondern aus diesen Basisklassen abgeleitet.
+## Fester Hardware-Pinstandard
 
-## Repository-Struktur
-- `docs/` Architektur, Protokoll, Regeln, Testplan, Altbestand-Zerlegung
-- `firmware/` PlatformIO-Firmware und gemeinsame Bibliotheken
-- `server/` neue Server-Basis für Raspberry Pi
-- `hardware/` Hardwareunterlagen und Varianten
-- `tools/` Git-, Prüf- und Hilfsskripte
-- `PROTOKOLL/` Versionen, Probleme, Entscheidungen und Tests
-- `private/` lokale, nicht veröffentlichte Dateien
+Der verbindliche Referenzpunkt ist `firmware/include/HardwarePinStandard.h`.
 
-## Öffentliche / private Trennung
-Dieses Repository darf **keine** echten Zugangsdaten enthalten.
+- I2C: `GPIO0` = SDA, `GPIO1` = SCL
+- interner NeoPixel: `GPIO8`
+- Relais-Boards: `Relais 1 = GPIO10`, `Relais 2 = GPIO5`
+- Batterie-ADC fuer `bat_sen`: `GPIO4`
+- Abweichungen sind nur mit expliziter Doku zulaessig
 
-Verwendetes Muster:
-- `Secrets.example.h` -> öffentliche Vorlage
-- `Secrets.h` -> lokal, nicht versioniert
-- `.env.example` -> öffentliche Vorlage
-- `.env` -> lokal, nicht versioniert
+## Belegter Stand
 
-## Arbeitsregel
-Altcode darf nur als Referenz für:
-- Pinbelegungen
-- Sensoransteuerung
-- Sicherheitslogik
-- bekannte Fehlerquellen
-- organisatorische Ideen
+Die belastbare Statusquelle ist `docs/14_test_und_nachweisstand.md`. Dort zaehlen nur reale Hardware- und reale lokale Servernachweise; Simulationen sind kein Hardware-Beleg.
 
-verwendet werden.
+- `master <-> net_erl_01`: realer Bring-up, MQTT-Minimalpfad, offizieller Node-RED-Rueckweg, ACK/Retry, Offline-Timeout und Langzeitlauf sind belegt.
+- `master <-> net_zrl_01`: realer Bring-up, offizieller Node-RED-Rueckweg fuer beide Relais, ACK/Retry, Offline-Timeout und Langzeitlauf sind belegt.
+- `net_sen_01`: lokaler Bring-up und offizieller Serverpfad mit realem DHT22 auf `GPIO6` bis MQTT `meta/status/state`, SQLite und Influx sind belegt.
+- Server-V1: MQTT-Ingest, SQLite-Ablage, Influx-Schreibpfad und SQLite-Audit fuer ausgehende `cmd/set`-Publishes sind belegt.
+- `bat_sen`: Code- und Buildbasis sind vorhanden, ein eigener realer Hardware-Nachweis fehlt noch.
 
-Er darf **nicht** als neue Basis hineinkopiert werden.
+Offen bleiben vor allem:
+
+- reale `bat_sen`-Hardwarebasis inklusive belastbarem Batteriepfad
+- weitere offizielle Nachweise ausserhalb der Pilotpfade `net_erl_01`, `net_zrl_01` und `net_sen_01`
+- Mehrgeraetebetrieb und ein vollstaendiger Gesamtprojektnachweis
+
+## Server-Stack
+
+Der produktive Serverpfad im Repo ist bewusst klein gehalten:
+
+- Mosquitto als MQTT-Broker
+- Node-RED als offizieller Bedien-, Automations- und `cmd/set`-Pfad
+- InfluxDB fuer numerische Sensorzeitreihen
+- SQLite fuer Geraetestatus, Konfiguration und Auditdaten
+
+Der Stack ist unter `server/` als Docker-Compose-Basis aufgebaut und fuer lokalen Betrieb sowie spaetere Uebernahme auf Raspberry Pi ausgelegt.
+
+## Rolle von `migration/` und `automation/night_pipeline/`
+
+Diese Bereiche sind Hilfsstruktur fuer kontrollierte Arbeit am Altbestand, nicht Teil des eigentlichen Produktpfads.
+
+- `migration/` haelt im Haupt-Branch vor allem Stage-Ordner und Status- bzw. Reportdateien fuer die Legacy-Auswertung.
+- `automation/night_pipeline/` enthaelt Runner, Prompts, Konfiguration und Logs fuer die gestufte Nacht-Pipeline.
+- inhaltlichere Stage-Ergebnisse liegen aktuell in den zugehoerigen `worktrees/night_*`.
+- Die Pipeline soll brauchbare Kleinteile aus Altmaterial sichtbar machen und filtern. Sie ersetzt weder die aktive Firmware noch den aktiven Server-Stack.
+
+## Repo-Struktur
+
+- `docs/`: Architektur, MQTT-Vertrag, Pinstandard, Projektgedaechtnis und belegter Ist-Stand
+- `PROTOKOLL/`: historische Beta-Staende und einzelne Nachweisdateien
+- `firmware/`: PlatformIO-Firmware fuer `master`, `net_erl`, `net_zrl`, `net_sen`, `bat_sen`
+- `server/`: Docker-Compose-Serverbasis mit Mosquitto, Node-RED, InfluxDB und SQLite
+- `migration/`: Status- und Reportspur der Legacy-Auswertung
+- `automation/night_pipeline/`: automatisierte Pipeline fuer gestufte Legacy-Auswertung
+- `worktrees/`: stage-spezifische Night-Pipeline-Arbeitsstaende
+
+## Naechste reale Luecke
+
+Die naechste harte Luecke ist `bat_sen`: reale Hardwarefakten fuer den Batteriepfad, ein erster sauberer Hardware-Nachweis und danach erst weitere `bat_sen`-Varianten. Danach folgen weitere offizielle Nachweise jenseits der bisherigen Pilotpfade und bessere Mindestdoku fuer die Hardware-Unterordner.
 
 ## Einstieg
-1. `docs/README.md`
-2. `AGENTS.md`
-3. `docs/PROJECT_CONTEXT.md`
-4. `docs/CURRENT_SPRINT.md`
-5. `docs/TASK_QUEUE.md`
-6. `docs/DECISIONS.md`
 
-## Steuerdateien fuer neue Chats
-Diese Dateien halten den Projektkontext im Repository und nicht im Chatverlauf:
-
-- `AGENTS.md`
-- `docs/PROJECT_CONTEXT.md`
-- `docs/CURRENT_SPRINT.md`
-- `docs/TASK_QUEUE.md`
-- `docs/DECISIONS.md`
-
-Fuer Test- und Statusaussagen zusaetzlich:
-
-- `docs/14_test_und_nachweisstand.md`
-
-## Arbeitsregeln fuer dieses Repository
-- Code-Arbeitsordner lokal: `C:\Users\mries\Documents\Playground\smarthome-esp32`
-- OneDrive dient nur fuer Doku, Begleitdateien, Exporte und Backups
-- GitHub ist das zentrale Remote fuer Code und oeffentliche Projektdaten
-- Keine Secrets im Repo: keine Passwoerter, Tokens, WLAN-Daten oder lokalen Zugangsdaten committen
-- Aenderungen sauber dokumentieren
-- Jede relevante Optimierung als neue Version mit Protokolleintrag behandeln
+- `docs/14_test_und_nachweisstand.md`: aktueller belegter Ist-Stand
+- `docs/15_hardware_pinstandard.md`: verbindlicher Pinstandard
+- `docs/04_mqtt_topics.md`: MQTT-Vertrag
+- `server/README.md`: Server-Basis und lokaler Startpfad
+- `PROTOKOLL/`: historische Einzelstaende
