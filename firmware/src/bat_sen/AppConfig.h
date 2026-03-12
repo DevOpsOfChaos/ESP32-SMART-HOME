@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdint.h>
+
 // ============================================================
 // BAT-SEN – Gerätekonfiguration vor dem Upload
 // ============================================================
@@ -47,5 +49,34 @@ constexpr unsigned long WACH_NACH_EVENT_MS = 1000UL;
 
 // Batterie: Warnung unter diesem Prozentsatz.
 constexpr uint8_t LOW_BATTERY_PCT = 20;
+
+enum BatteryProfileV1 : uint8_t {
+    BAT_PROFILE_COIN_3V_PRIMARY = 1U,
+    BAT_PROFILE_ALKALINE_2X = 2U,
+    BAT_PROFILE_LIION_1S = 3U,
+};
+
+struct BatteryProfileVoltageRange {
+    uint16_t leer_mv;
+    uint16_t voll_mv;
+};
+
+// V1 supports exactly these three profiles. NiMH, LiFePO4 and other mixes
+// stay out of scope until there is a real hardware need for them.
+constexpr BatteryProfileV1 BATTERY_PROFILE = BAT_PROFILE_COIN_3V_PRIMARY;
+
+constexpr uint32_t BATTERY_DIVIDER_TOP_OHM = 100000UL;
+constexpr uint32_t BATTERY_DIVIDER_BOTTOM_OHM = 100000UL;
+constexpr uint8_t BATTERY_ADC_SAMPLE_COUNT = 4U;
+
+constexpr BatteryProfileVoltageRange BATTERY_PROFILE_COIN_3V_PRIMARY_RANGE = {2000U, 3000U};
+constexpr BatteryProfileVoltageRange BATTERY_PROFILE_ALKALINE_2X_RANGE = {2000U, 3200U};
+constexpr BatteryProfileVoltageRange BATTERY_PROFILE_LIION_1S_RANGE = {3200U, 4200U};
+
+static_assert(
+    BATTERY_PROFILE == BAT_PROFILE_COIN_3V_PRIMARY ||
+    BATTERY_PROFILE == BAT_PROFILE_ALKALINE_2X ||
+    BATTERY_PROFILE == BAT_PROFILE_LIION_1S,
+    "BAT-SEN V1 supports only the explicit coin/alcaline/liion battery profiles.");
 
 constexpr unsigned long LOOP_INTERVAL_MS = 25UL;

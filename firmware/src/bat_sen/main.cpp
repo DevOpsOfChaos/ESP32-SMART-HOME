@@ -3,8 +3,8 @@
  Projekt   : SmartHome ESP32
  Geraet    : BAT-SEN (Batteriebetrieben, Sensor/Event-Basis)
  Datei     : main.cpp
- Version   : 0.2.2
- Stand     : 2026-03-10
+ Version   : 0.2.3
+ Stand     : 2026-03-12
 
  Funktion:
  Allgemeine Batterie-Basis in derselben ESP-NOW-Linie wie die
@@ -45,8 +45,14 @@
 
 constexpr bool DEBUG_LOKAL_AKTIV = DEVICE_DEBUG_AKTIV && DEBUG_AKTIV;
 constexpr char DATEI_GERAET[] = "BAT-SEN";
-constexpr char DATEI_VERSION[] = "0.2.2";
+constexpr char DATEI_VERSION[] = "0.2.3";
 const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+struct BatteryProfileConfig {
+    const char* name;
+    uint16_t leer_mv;
+    uint16_t voll_mv;
+};
 
 struct NodeState {
     bool master_bekannt;
@@ -70,6 +76,55 @@ struct NodeState {
 };
 
 NodeState nodeStatus = {};
+
+BatteryProfileConfig holeBatterieProfil() {
+    switch (BATTERY_PROFILE) {
+        case BAT_PROFILE_COIN_3V_PRIMARY:
+            return {"coin_3v_primary", BATTERY_PROFILE_COIN_3V_PRIMARY_RANGE.leer_mv, BATTERY_PROFILE_COIN_3V_PRIMARY_RANGE.voll_mv};
+
+        case BAT_PROFILE_ALKALINE_2X:
+            return {"alkaline_2x", BATTERY_PROFILE_ALKALINE_2X_RANGE.leer_mv, BATTERY_PROFILE_ALKALINE_2X_RANGE.voll_mv};
+
+        case BAT_PROFILE_LIION_1S:
+            return {"liion_1s", BATTERY_PROFILE_LIION_1S_RANGE.leer_mv, BATTERY_PROFILE_LIION_1S_RANGE.voll_mv};
+    }
+
+    return {"coin_3v_primary", BATTERY_PROFILE_COIN_3V_PRIMARY_RANGE.leer_mv, BATTERY_PROFILE_COIN_3V_PRIMARY_RANGE.voll_mv};
+}
+
+uint8_t berechneBatterieProzent(uint16_t batterieMv) {
+    BatteryProfileConfig profil = holeBatterieProfil();
+
+    if (batterieMv <= profil.leer_mv) return 0U;
+    if (batterieMv >= profil.voll_mv) return 100U;
+
+    return (uint8_t)((((uint32_t)batterieMv - profil.leer_mv) * 100UL) / ((uint32_t)profil.voll_mv - profil.leer_mv));
+}
+
+uint16_t leseBatterieMillivolt() {
+    // V1 knows only the fixed GPIO4 battery divider: 100k / 100k => ADC sees VBAT / 2.
+    // `analogReadMilliVolts()` uses the Arduino/ESP32 calibration path when available,
+    // but board-specific ADC accuracy is still not hardware-validated for this device.
+    uint32_t adcSummeMv = 0UL;
+    for (uint8_t i = 0U; i < BATTERY_ADC_SAMPLE_COUNT; ++i) {
+        adcSummeMv += analogReadMilliVolts(PIN_BATTERY_ADC);
+    }
+
+    uint32_t adcEingangMv = (adcSummeMv + (BATTERY_ADC_SAMPLE_COUNT / 2U)) / BATTERY_ADC_SAMPLE_COUNT;
+    if (adcEingangMv == 0UL) {
+        return 0U;
+    }
+
+    // The 100 uF cap on the divider node keeps the input slow but stable, so a short average is enough here.
+    uint32_t batterieMv =
+        (adcEingangMv * (BATTERY_DIVIDER_TOP_OHM + BATTERY_DIVIDER_BOTTOM_OHM)) / BATTERY_DIVIDER_BOTTOM_OHM;
+
+    if (batterieMv > 65535UL) {
+        batterieMv = 65535UL;
+    }
+
+    return (uint16_t)batterieMv;
+}
 
 void logf(const char* level, const char* format, ...) {
     if (!DEBUG_LOKAL_AKTIV) return;
@@ -244,6 +299,10 @@ void initialisiereHardware() {
     if (PIN_BUTTON_3 >= 0) pinMode(PIN_BUTTON_3, INPUT_PULLUP);
     if (PIN_BUTTON_4 >= 0) pinMode(PIN_BUTTON_4, INPUT_PULLUP);
     if (PIN_REED >= 0) pinMode(PIN_REED, INPUT_PULLUP);
+    if (PIN_BATTERY_ADC >= 0) {
+        adcAttachPin(PIN_BATTERY_ADC);
+        analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
+    }
 
     nodeStatus.batterie_pct = 0xFFU;
     nodeStatus.batterie_mv = 0U;
@@ -288,6 +347,9 @@ void gibStartmeldungAus() {
     Serial.print("Sleep-Intervall reserviert: ");
     Serial.print(SLEEP_INTERVAL_S);
     Serial.println(" s");
+    BatteryProfileConfig profil = holeBatterieProfil();
+    Serial.print("Batterieprofil: ");
+    Serial.println(profil.name);
     Serial.println("================================");
 }
 
@@ -298,8 +360,15 @@ void messeBatterie() {
         return;
     }
 
-    nodeStatus.batterie_pct = 100U;
-    nodeStatus.batterie_mv = 3700U;
+    uint16_t batterieMv = leseBatterieMillivolt();
+    if (batterieMv == 0U) {
+        nodeStatus.batterie_pct = 0xFFU;
+        nodeStatus.batterie_mv = 0U;
+        return;
+    }
+
+    nodeStatus.batterie_mv = batterieMv;
+    nodeStatus.batterie_pct = berechneBatterieProzent(batterieMv);
 }
 
 uint8_t liesButtonFlags() {
