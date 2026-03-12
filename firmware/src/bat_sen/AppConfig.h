@@ -63,6 +63,9 @@ struct BatteryProfileVoltageRange {
 
 // V1 supports exactly these three profiles. NiMH, LiFePO4 and other mixes
 // stay out of scope until there is a real hardware need for them.
+// The base build defaults to the 3 V coin profile until the concrete board
+// profile is pinned down in repo config. Change this constant deliberately
+// for alkaline_2x or liion_1s hardware instead of trusting the percentage.
 constexpr BatteryProfileV1 BATTERY_PROFILE = BAT_PROFILE_COIN_3V_PRIMARY;
 
 constexpr uint32_t BATTERY_DIVIDER_TOP_OHM = 100000UL;

@@ -301,6 +301,8 @@ void initialisiereHardware() {
     if (PIN_REED >= 0) pinMode(PIN_REED, INPUT_PULLUP);
     if (PIN_BATTERY_ADC >= 0) {
         adcAttachPin(PIN_BATTERY_ADC);
+        // 11 dB is the safest minimal V1 choice until the exact board attenuation
+        // and calibration are proven on real bat_sen hardware.
         analogSetPinAttenuation(PIN_BATTERY_ADC, ADC_11db);
     }
 
