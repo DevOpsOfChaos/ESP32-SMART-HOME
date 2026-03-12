@@ -1,0 +1,92 @@
+Stand: beta38
+Datei: beta38_bat_sen_01_realer_handshake_com3_com7_hello_ack_state_report.txt
+Datum: 2026-03-12
+Autor: Codex
+Status: realer lokaler Handshake-Nachweis fuer `bat_sen_01`, kein voller offizieller Server- oder Gesamtprojektnachweis
+
+1. Anlass
+- `beta36` hatte den realen `bat_sen`-Blocker bereits auf die fehlenden Belege fuer `HELLO_ACK` und den ersten `STATE_REPORT` verengt.
+- Die bequeme Ausrede "vielleicht laeuft auf dem Master noch ein alter Stand" musste eliminiert werden, sonst bleibt jede weitere Beobachtung wertlos.
+- Manuelle serielle Einzelfenster waren fuer diese Frage zu schwach: zu langsam, nicht zeitkorreliert und zu leicht falsch erinnerbar.
+
+2. Aenderung
+- Der aktive Masterpfad wurde vor dem Lauf verifiziert:
+  - `firmware/platformio.ini` nutzt fuer `master` weiterhin `build_src_filter = -<*> +<master/>`
+  - der aktive Codepfad ist also `firmware/src/master/`
+- Im aktuellen Repo-Stand `HEAD = 532fe44` ist die erwartete `bat_sen`-Registrierung weiter enthalten:
+  - `firmware/src/master/main.cpp` fuehrt `{"bat_sen_01", "bat_sen", SH_CLASS_BAT_SEN, SH_POWER_BATTERY, ...}` in `NODE_DEFINITIONS`
+  - `verarbeiteHello(...)` sendet bei passender `node_id`, `device_class` und `power_type` ein `HELLO_ACK`
+- Beide echten Boards wurden mit genau diesem Stand neu gebaut und neu geflasht:
+  - `master` auf `COM3`
+  - `bat_sen` auf `COM7`
+- Fuer die Beobachtung wurde ein neues Hilfswerkzeug angelegt:
+  - `tools/serial_log_parser/dual_serial_capture.py`
+  - Funktion: gleichzeitige, timestamped Serial-Capture mehrerer Ports mit per-Port- und Combined-Log und optionalem DTR/RTS-Resetpuls
+- Der reale Lauf wurde als Dual-Capture gespeichert unter:
+  - `tmp/serial_capture/20260312_153811/`
+
+3. Begruendung
+- Ohne Reflash auf beiden Seiten bleibt ein alter Masterstand eine billige Scheinerklaerung.
+- Ohne gemeinsame Capture-Datei bleibt die Reihenfolge `Reset -> Boot -> HELLO -> HELLO_ACK -> STATE_REPORT` nur Erzaehlung.
+- Der neue Ablauf ist deshalb bewusst eng:
+  - build
+  - reflash beider Boards
+  - gleichzeitige Capture auf `COM3` und `COM7`
+  - gestaffelter DTR/RTS-Reset: zuerst `master`, dann `bat_sen`
+
+4. Verbesserungseffekt
+- Der zuvor offene Kernpunkt ist jetzt real sichtbar statt vermutet.
+- Relevante Combined-Capture-Auszuge:
+  - `2026-03-12T15:38:15.043+01:00 [bat_sen COM7] [INFO] HELLO gesendet`
+  - `2026-03-12T15:38:15.045+01:00 [master COM3] [INFO] HELLO_ACK gesendet an 8C:D0:B2:A9:41:F9`
+  - `2026-03-12T15:38:15.045+01:00 [master COM3] [INFO] HELLO von bat_sen_01 (BAT-SEN Base)`
+  - `2026-03-12T15:38:15.067+01:00 [bat_sen COM7] [INFO] HELLO_ACK empfangen, Master-Kanal=6`
+  - `2026-03-12T15:38:15.067+01:00 [bat_sen COM7] [INFO] Master-MAC: 20:6E:F1:6D:92:C0`
+  - `2026-03-12T15:38:15.067+01:00 [bat_sen COM7] [INFO] BATTERY_VALIDATION phase=state_report profile=coin_3v_primary adc_mv=1471 battery_mv=2942 battery_pct=94`
+  - `2026-03-12T15:38:15.145+01:00 [master COM3] [INFO] STATE_REPORT von bat_sen_01 verarbeitet`
+  - `2026-03-12T15:38:15.177+01:00 [bat_sen COM7] [INFO] STATE_REPORT gesendet`
+- Damit ist fuer diesen Stand real belegt:
+  - `bat_sen_01` sendet `HELLO`
+  - `master` empfängt/verarbeitet `HELLO`
+  - `master` sendet `HELLO_ACK`
+  - `bat_sen_01` empfängt `HELLO_ACK`
+  - `bat_sen_01` sendet den ersten `STATE_REPORT`
+  - `master` verarbeitet den ersten `STATE_REPORT`
+- Zusaetzliche Beobachtung im selben Lauf:
+  - der `master` kam kurz danach real auf WLAN/MQTT hoch und loggte neue retained Publishes fuer `smarthome/node/bat_sen_01/meta|status|state`
+  - das ist ein starkes Indiz fuer den lokalen MQTT-Pfad, aber noch kein sauber separater Broker-/SQLite-/Influx-Nachweis
+
+5. Risiken / Trade-offs
+- Der Lauf ist ein enger lokaler Bring-up-/Handshake-Nachweis, kein voller offizieller Servernachweis fuer `bat_sen`.
+- Die aktuelle Prozentanzeige bleibt an das Default-Profil `coin_3v_primary` gebunden; die endgueltige reale Chemieentscheidung ist damit nicht erledigt.
+- Der direkte GPIO4-Multimeterwert am Teilerknoten fehlt weiterhin.
+- Der Lauf prueft keinen Langzeitbetrieb, keine Deep-Sleep-Rueckkehr und keinen Mehrgeraetebetrieb.
+- Das DTR/RTS-Reset funktionierte in diesem Aufbau real. Das ist gut, aber keine pauschale Garantie fuer jede kuenftige USB-/Treiberlage.
+
+6. Teststatus
+- Build:
+  - `& "$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe" run -e master`
+  - `& "$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe" run -e bat_sen`
+- Reflash:
+  - `& "$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe" run -e master -t upload --upload-port COM3`
+  - `& "$env:USERPROFILE\\.platformio\\penv\\Scripts\\platformio.exe" run -e bat_sen -t upload --upload-port COM7`
+- Capture:
+  - `python tools\\serial_log_parser\\dual_serial_capture.py --port master=COM3 --port bat_sen=COM7 --duration 20 --reset-mode dtr-rts --reset-label master --reset-label bat_sen --reset-gap 2.0 --arm-delay 1.0`
+- Ergebnis:
+  - DTR/RTS-Reset loeste auf beiden Ports reale Bootsequenzen aus (`USB_UART_CHIP_RESET`)
+  - `HELLO_ACK` ist jetzt real belegt
+  - erster `STATE_REPORT` ist jetzt real belegt
+  - channel/role/id/peer-Grundpfad ist fuer diesen Stand nicht mehr der Blocker
+
+7. Lehrerblick
+- Welche Eigenleistung steckt in diesem Stand?
+  - aktive Firmwarepfade verifiziert statt blind angenommen
+  - stale-master-Risiko durch echten Reflash beider Boards entfernt
+  - serielles Dual-Capture-Werkzeug fuer reproduzierbare Nachweise erstellt
+  - reale Capture interpretiert und eng protokolliert statt aufgeblasen
+- Was wurde nur als Referenz genutzt?
+  - bestehende `master`-/`bat_sen`-Firmwarelogik
+  - bestehende Nachweislage aus `beta36`
+- Warum ist der Stand fachlich nachvollziehbar?
+  - weil die relevante Reihenfolge jetzt in einer gemeinsamen, timestamped Capture-Datei sichtbar ist und nicht nur in getrennten Erinnerungsfragmenten:
+    `Reset -> Boot -> HELLO -> HELLO_ACK -> erster STATE_REPORT`
