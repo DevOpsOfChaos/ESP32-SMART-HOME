@@ -1,0 +1,80 @@
+Stand: beta43
+Datei: beta43_dashboard_header_wetterleiste_lampenwidgets.txt
+Datum: 2026-03-12
+Autor: Codex
+
+1. Anlass
+- Der reale Dashboard-V1-Stand nach `12a43ea` war in der Uebersicht bereits lesbarer, aber der Top-Level-Eindruck blieb unruhig:
+  - die aktive Seite stand doppelt als App-Bar-Titel und nochmals als grosser Inhaltskopf im Page-Body
+  - Wetter belegte auf der Uebersicht weiterhin einen breiten eigenen Block statt eine globale, sparsame Statusspur zu sein
+  - fuer Benachrichtigungen gab es im Header noch keinen vorbereiteten Platz
+  - die Uebersicht zaehlte und rendere Master-Geraete noch nicht sauber getrennt
+  - Relais-Widgets funktionierten, sahen aber weiter nach generischen Toggles statt nach Lampen aus
+
+2. Aenderung
+- Aktualisiert:
+  - `server/nodered/build-flows.js`
+- Neu:
+  - globale Header-/Wetter-Payload-Spur fuer alle Dashboard-Seiten
+  - kompakte Headerleiste mit Benachrichtigungs-Platzhalter und Wetterstatus
+- Neu im task-lokalen Verlauf:
+  - `PROTOKOLL/beta43_dashboard_header_wetterleiste_lampenwidgets.txt`
+- Konkret im produktiven Flow-Generator:
+  - alle Dashboard-Gruppen blenden ihre internen Gruppentitel aus; der App-Bar-Seitentitel bleibt die primaere Seitenkennung
+  - die grossen, redundanten Einleitungskoepfe auf Uebersicht und Unterseiten wurden entfernt; oben bleiben nur noch knappe Aktionszeilen
+  - die Wetterkarte wurde aus der Uebersicht entfernt und in eine globale, flache Headerleiste verlagert
+  - die Headerleiste zeigt kompakt:
+  - Wetterzustand als kleines Icon/animierte Darstellung
+  - Provider-/Statuskurztext
+  - lesbares Alter des letzten Wetterstands
+  - einen zentrierten Benachrichtigungs-Platzhalter mit Glocke und Zaehler
+  - die Uebersichtssummary zeigt nur noch:
+  - `Geraete x`
+  - `Master x`
+  - Master-Geraete werden im Overview-Datensatz herausgefiltert und nicht mehr als normale Uebersichtskarten gerendert
+  - Relaissteuerungen in Karten und im Detailpfad wurden als Lampenwidget umgebaut:
+  - AUS = dunkle Lampe ohne Glow
+  - EIN = deutlich warme, leuchtende Lampe
+  - Klick bleibt an die bestehende `relay_set`-Semantik gebunden
+  - bestehende UI-Relaisnamen (`ui_relay_1_name`, `ui_relay_2_name`) bleiben erhalten
+
+3. Begruendung
+- Die App-Bar weiss bereits, welche Seite aktiv ist. Ein zweiter, grosser Seitentitel direkt darunter ist verschwendete Hoehe und macht die Startansicht schwerfaelliger.
+- Wetter ist auf diesem Stand eher Kontextsignal als primaerer Arbeitsblock. Daher gehoert es in eine globale, schmale Kopfspur.
+- Master sind infrastrukturell relevant, aber fuer die normale Geraetekarten-Uebersicht irrefuehrend. Zaehlen ja, als Endgeraet rendern nein.
+- Ein Lampenaktor sollte in der UI wie Licht lesbar sein. Wenn der Nutzer zuerst Text entziffern muss, ist das Widget gestalterisch zu schwach.
+
+4. Verbesserungseffekt
+- Die Dashboard-Oberkante ist deutlich ruhiger und laesst mehr Raum fuer die eigentlichen Inhalte.
+- Wetterstatus ist jetzt auf allen Tabs sichtbar, ohne die Uebersicht mit einem Zusatzblock aufzublaehen.
+- Die Uebersicht ist dichter: weniger Headerlaerm, weniger Summary-Muell, keine Master-Karten.
+- Relaiskarten transportieren den Lichtzustand jetzt visuell statt nur textlich.
+
+5. Risiken / Trade-offs
+- Die globale Headerleiste bleibt bewusst klein und informativ. Sie ersetzt kein vollwertiges Benachrichtigungssystem und keine detaillierte Wetterseite.
+- Fuer Header-Level-Layout und Lampenvisualisierung war `ui-template` notwendig. Standard-Widgets reichen fuer diese Verdichtung und die visuelle Lampenmetapher nicht sauber aus.
+- Die Lampenpruefung bestaetigte den echten Server-Egress (`cmd/set`) fuer `test_net_erl_01`. Im Beobachtungsfenster kam jedoch kein neuer offizieller `state`-Ruecklauf an; daher wurde die volle Geraete-Roundtrip-Bestaetigung fuer diesen Klick nicht behauptet.
+
+6. Teststatus
+- Lokal ausgefuehrt:
+  - `node server/nodered/build-flows.js > $null`
+  - `docker compose config > $null`
+  - `docker compose up -d --build nodered`
+  - `docker compose logs --tail=30 --timestamps nodered`
+- Browser-/Live-Pruefung:
+  - `/dashboard/`
+  - `/dashboard/wetter`
+- Konkret verifiziert:
+  - auf `/dashboard/` ist der doppelte Seitentitel im Inhaltsbereich entfernt
+  - die Summary zeigt nur `8 Geraete` und `2 Master`
+  - Master werden nicht mehr als normale Uebersichtskarten gerendert
+  - der Header-Platzhalter fuer Benachrichtigungen ist sichtbar und oeffnet einen kleinen vorbereiteten Infobereich
+  - die kompakte Wetterleiste ist auf `/dashboard/` und `/dashboard/wetter` sichtbar und bleibt damit seitenuebergreifend bestehen
+  - eine Relaiskarte (`test_net_erl_01`) rendert als Lampenwidget mit EIN-Zustand
+  - eine Nicht-Lampen-Karte (`test_net_sen_01`) bleibt eine kompakte sachliche Sensorkarte ohne Lampenwidget
+  - ein Klick auf das Lampenwidget von `test_net_erl_01` erzeugte einen neuen `audit_log`-Egress fuer `smarthome/node/test_net_erl_01/cmd/set` mit Payload `{\"cmd\":\"set_relay\",\"relay_1\":false,...}`
+  - waehrend der kurzen Pruefung kam fuer diesen Klick kein neuer offizieller `state`-Ruecklauf im Dashboard an; der zuletzt persistierte `device_last_state` blieb auf `relay_1:true`
+
+7. Lehrerblick
+- Das war kein Architekturtheater, sondern eine fokussierte Bereinigung des echten Dashboard-Pfads.
+- Nicht angefasst wurden Firmware, Diagrammepass, Shared-Docs und sonstige Querschnittsbaustellen ausserhalb des beauftragten UI-/Server-Scope.

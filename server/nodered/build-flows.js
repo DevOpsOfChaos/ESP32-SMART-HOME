@@ -57,6 +57,7 @@ const ids = {
     uiTemplateAutomations: "ui_template_automations",
     uiTemplateConfig: "ui_template_config",
     uiTemplateLogs: "ui_template_logs",
+    uiTemplateHeader: "ui_template_header",
     mqttServerStatus: "mqtt_server_status",
     mqttMasterStatus: "mqtt_master_status",
     mqttMasterEvent: "mqtt_master_event",
@@ -126,6 +127,10 @@ const ids = {
     buildWeatherSaveStatements: "fn_build_weather_save_statements",
     sqliteWeatherWrite: "sqlite_weather_write",
     routePostWeatherWrite: "fn_route_post_weather_write",
+    routeHeaderAction: "fn_route_header_action",
+    buildHeaderQuery: "fn_build_header_query",
+    sqliteHeaderQuery: "sqlite_header_query",
+    buildHeaderPayload: "fn_build_header_payload",
     routeAutomationAction: "fn_route_automation_action",
     buildAutomationQuery: "fn_build_automation_query",
     sqliteAutomationQuery: "sqlite_automation_query",
@@ -1335,11 +1340,11 @@ const dashboardSharedStyle = String.raw`
 
     .sh-toolbar {
         display: flex;
-        gap: 0.9rem;
-        justify-content: space-between;
-        align-items: flex-start;
+        gap: 0.65rem;
+        justify-content: flex-end;
+        align-items: center;
         flex-wrap: wrap;
-        margin-bottom: 0.8rem;
+        margin-bottom: 0.6rem;
     }
 
     .sh-toolbar h2 {
@@ -1360,6 +1365,7 @@ const dashboardSharedStyle = String.raw`
         gap: 0.45rem;
         flex-wrap: wrap;
         justify-content: flex-end;
+        margin-left: auto;
     }
 
     .sh-nav-link,
@@ -1681,93 +1687,163 @@ const dashboardSharedStyle = String.raw`
 
     .sh-lamp-grid {
         display: grid;
-        gap: 0.52rem;
-        grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+        gap: 0.58rem;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 
     .sh-lamp-button {
         width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.72rem;
-        border-radius: 18px;
-        border: 1px solid rgba(53, 70, 86, 0.88);
+        display: grid;
+        justify-items: center;
+        gap: 0.58rem;
+        padding: 0.88rem 0.78rem 0.8rem;
+        border-radius: 22px;
+        border: 1px solid rgba(49, 66, 82, 0.9);
         background: linear-gradient(180deg, rgba(19, 28, 38, 0.96), rgba(9, 14, 20, 0.99));
         color: var(--sh-text);
-        gap: 0.68rem;
         text-align: left;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
-    .sh-lamp-shell {
-        min-width: 0;
-        flex: 1 1 auto;
-        display: flex;
-        align-items: center;
-        gap: 0.68rem;
+    .sh-lamp-art {
+        position: relative;
+        width: 4.7rem;
+        height: 5.35rem;
+        display: grid;
+        justify-items: center;
+        align-content: start;
+        padding-top: 0.18rem;
     }
 
-    .sh-lamp-visual {
-        flex: 0 0 2.4rem;
-        width: 2.4rem;
-        height: 2.4rem;
+    .sh-lamp-glow {
+        position: absolute;
+        inset: 0.1rem;
         border-radius: 999px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid rgba(67, 84, 103, 0.92);
-        background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.12), rgba(17, 27, 39, 0.98));
-        color: #afc4d8;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        background: radial-gradient(circle, rgba(255, 214, 107, 0.82), rgba(255, 180, 33, 0.18) 46%, transparent 74%);
+        opacity: 0;
+        transform: scale(0.82);
+        filter: blur(7px);
+        transition: opacity 0.18s ease, transform 0.18s ease;
     }
 
-    .sh-lamp-button.is-on {
-        border-color: rgba(184, 151, 79, 0.72);
-        background: linear-gradient(180deg, rgba(57, 43, 17, 0.92), rgba(29, 21, 8, 0.98));
-    }
-
-    .sh-lamp-button.is-on .sh-lamp-visual {
-        color: #ffe082;
-        border-color: rgba(232, 191, 93, 0.82);
-        background: radial-gradient(circle at 35% 30%, rgba(255, 247, 193, 0.95), rgba(255, 179, 0, 0.22) 42%, rgba(54, 39, 10, 0.95) 100%);
+    .sh-lamp-bulb {
+        position: relative;
+        width: 3.15rem;
+        height: 3.7rem;
+        border-radius: 1.72rem 1.72rem 1.18rem 1.18rem;
+        border: 1px solid rgba(74, 91, 110, 0.88);
+        background: linear-gradient(180deg, rgba(117, 129, 143, 0.24), rgba(29, 40, 52, 0.96));
         box-shadow:
-            0 0 0 1px rgba(255, 214, 107, 0.18),
-            0 0 18px rgba(255, 193, 7, 0.22);
-        animation: shPulseGlow 2.2s ease-in-out infinite;
+            inset 0 1px 0 rgba(255, 255, 255, 0.05),
+            inset 0 -0.55rem 0.85rem rgba(0, 0, 0, 0.26);
+    }
+
+    .sh-lamp-bulb::before {
+        content: "";
+        position: absolute;
+        left: 0.58rem;
+        top: 0.38rem;
+        width: 0.82rem;
+        height: 1.34rem;
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.24), transparent);
+        transform: rotate(-18deg);
+        opacity: 0.52;
+    }
+
+    .sh-lamp-filament {
+        position: absolute;
+        left: 50%;
+        bottom: 0.72rem;
+        width: 1.18rem;
+        height: 0.72rem;
+        transform: translateX(-50%);
+        border: 2px solid rgba(166, 179, 193, 0.48);
+        border-top: none;
+        border-radius: 0 0 0.72rem 0.72rem;
+    }
+
+    .sh-lamp-cap {
+        width: 1.78rem;
+        height: 0.66rem;
+        margin-top: -0.14rem;
+        border-radius: 0 0 0.48rem 0.48rem;
+        background: linear-gradient(180deg, #798696, #3c4855);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+
+    .sh-lamp-base {
+        width: 1.05rem;
+        height: 0.46rem;
+        margin-top: -0.08rem;
+        border-radius: 0 0 0.28rem 0.28rem;
+        background: #55626e;
     }
 
     .sh-lamp-copy {
         min-width: 0;
-        flex: 1 1 auto;
         display: grid;
-        gap: 0.12rem;
+        gap: 0.16rem;
+        justify-items: center;
+        text-align: center;
     }
 
     .sh-lamp-copy strong {
-        font-size: 0.93rem;
+        font-size: 0.94rem;
         font-weight: 600;
     }
 
     .sh-lamp-copy small {
         color: var(--sh-text-muted);
-        font-size: 0.78rem;
+        font-size: 0.77rem;
     }
 
-    .sh-lamp-side {
+    .sh-lamp-button.is-on {
+        border-color: rgba(190, 153, 73, 0.82);
+        background: linear-gradient(180deg, rgba(60, 44, 16, 0.94), rgba(27, 18, 6, 0.99));
+        box-shadow:
+            inset 0 1px 0 rgba(255, 246, 214, 0.08),
+            0 10px 22px rgba(0, 0, 0, 0.2);
+    }
+
+    .sh-lamp-button.is-on .sh-lamp-glow {
+        opacity: 1;
+        transform: scale(1);
+        animation: shPulseGlow 2.2s ease-in-out infinite;
+    }
+
+    .sh-lamp-button.is-on .sh-lamp-bulb {
+        border-color: rgba(237, 197, 96, 0.86);
+        background: radial-gradient(circle at 50% 28%, rgba(255, 248, 205, 0.98), rgba(255, 220, 136, 0.96) 42%, rgba(162, 105, 18, 0.95) 100%);
+        box-shadow:
+            0 0 0 1px rgba(255, 214, 107, 0.16),
+            0 0 22px rgba(255, 194, 72, 0.24),
+            inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    .sh-lamp-button.is-on .sh-lamp-filament {
+        border-color: rgba(123, 76, 5, 0.82);
+    }
+
+    .sh-lamp-button.is-on .sh-lamp-cap,
+    .sh-lamp-button.is-on .sh-lamp-base {
+        background: linear-gradient(180deg, #95846d, #5f4b2d);
+    }
+
+    .sh-lamp-state-row {
         display: grid;
-        gap: 0.26rem;
-        justify-items: end;
-        flex: 0 0 auto;
+        gap: 0.18rem;
+        justify-items: center;
     }
 
     .sh-lamp-state-pill {
-        min-width: 3.1rem;
+        min-width: 3.7rem;
         text-align: center;
         border-radius: 999px;
         border: 1px solid rgba(63, 81, 100, 0.9);
         background: rgba(15, 23, 32, 0.92);
         color: #9fb6cb;
-        padding: 0.16rem 0.52rem;
+        padding: 0.2rem 0.56rem;
         font-size: 0.72rem;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -1778,39 +1854,6 @@ const dashboardSharedStyle = String.raw`
         border-color: rgba(232, 191, 93, 0.72);
         background: rgba(74, 54, 13, 0.92);
         color: #ffe59c;
-    }
-
-    .sh-lamp-switch {
-        position: relative;
-        width: 3.3rem;
-        height: 1.82rem;
-        border-radius: 999px;
-        border: 1px solid rgba(67, 84, 103, 0.92);
-        background: linear-gradient(180deg, rgba(29, 42, 55, 0.98), rgba(15, 22, 31, 0.98));
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    }
-
-    .sh-lamp-switch-thumb {
-        position: absolute;
-        top: 0.12rem;
-        left: 0.14rem;
-        width: 1.42rem;
-        height: 1.42rem;
-        border-radius: 999px;
-        background: linear-gradient(180deg, #d8e2ec, #a8bacd);
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-        transition: transform 0.18s ease;
-    }
-
-    .sh-lamp-button.is-on .sh-lamp-switch {
-        border-color: rgba(232, 191, 93, 0.74);
-        background: linear-gradient(180deg, rgba(189, 134, 29, 0.96), rgba(133, 88, 10, 0.96));
-        box-shadow: 0 0 0 1px rgba(255, 214, 107, 0.18);
-    }
-
-    .sh-lamp-button.is-on .sh-lamp-switch-thumb {
-        transform: translateX(1.56rem);
-        background: linear-gradient(180deg, #fff7d1, #ffe082);
     }
 
     .sh-cover-widget {
@@ -2216,42 +2259,15 @@ const buildDeviceGridTemplate = ({ viewKey, title, intro, emptyText }) => `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">${intro}</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="refresh">Neu laden</button>
                 ${renderDashboardNavHtml()}
             </div>
         </div>
 
-        <div class="sh-status-row" v-if="payload.summary">
-            <span class="sh-chip">{{ payload.summary.total_devices || 0 }} Geräte</span>
-            <span class="sh-chip sh-chip-online">{{ payload.summary.online_devices || 0 }} online</span>
-            <span class="sh-chip sh-chip-offline">{{ payload.summary.offline_devices || 0 }} offline</span>
-            <span class="sh-chip" v-if="payload.summary.sensor_devices">{{ payload.summary.sensor_devices }} Sensor-Geräte</span>
-            <span class="sh-chip" v-if="payload.summary.actuator_devices">{{ payload.summary.actuator_devices }} Aktor-Geräte</span>
-        </div>
-
-        <div class="sh-weather-card" v-if="payload.page && payload.page.key === 'overview' && payload.weather">
-            <div class="sh-card-head">
-                <div>
-                    <h3>Wetter</h3>
-                    <p class="sh-muted">{{ payload.weather.summary_line }}</p>
-                </div>
-                <div class="sh-card-badges">
-                    <span class="sh-chip">{{ payload.weather.provider_label }}</span>
-                    <span class="sh-chip" :class="payload.weather.enabled ? 'sh-chip-online' : 'sh-chip-unknown'">
-                        {{ payload.weather.enabled ? 'aktiv' : 'inaktiv' }}
-                    </span>
-                </div>
-            </div>
-            <div class="sh-value-list">
-                <div class="sh-value-row"><span>Ort</span><strong>{{ payload.weather.location_label || '-' }}</strong></div>
-                <div class="sh-value-row"><span>Koordinaten</span><strong>{{ payload.weather.coords_label }}</strong></div>
-                <div class="sh-value-row"><span>Abfrage</span><strong>{{ payload.weather.poll_label }}</strong></div>
-            </div>
-            <p class="sh-muted">{{ payload.weather.note }}</p>
+        <div class="sh-status-row" v-if="payload.page && payload.page.key === 'overview' && payload.summary">
+            <span class="sh-chip">{{ payload.summary.device_count || 0 }} Geräte</span>
+            <span class="sh-chip">{{ payload.summary.master_count || 0 }} Master</span>
         </div>
 
         <div class="sh-empty" v-if="!deviceList.length">${emptyText}</div>
@@ -2308,20 +2324,20 @@ const buildDeviceGridTemplate = ({ viewKey, title, intro, emptyText }) => `
                             type="button"
                             :aria-pressed="relay.active ? 'true' : 'false'"
                             @click="relaySet(device.device_id, relay.key, !relay.active)">
-                            <span class="sh-lamp-shell">
-                                <span class="sh-lamp-visual">
-                                    <i :class="'mdi ' + relay.icon"></i>
+                            <span class="sh-lamp-art" aria-hidden="true">
+                                <span class="sh-lamp-glow"></span>
+                                <span class="sh-lamp-bulb">
+                                    <span class="sh-lamp-filament"></span>
                                 </span>
-                                <span class="sh-lamp-copy">
-                                    <strong>{{ relay.label }}</strong>
-                                    <small>{{ relay.action_label }}</small>
-                                </span>
+                                <span class="sh-lamp-cap"></span>
+                                <span class="sh-lamp-base"></span>
                             </span>
-                            <span class="sh-lamp-side">
+                            <span class="sh-lamp-copy">
+                                <strong>{{ relay.label }}</strong>
+                                <small>{{ relay.action_label }}</small>
+                            </span>
+                            <span class="sh-lamp-state-row">
                                 <span class="sh-lamp-state-pill">{{ relay.state_label }}</span>
-                                <span class="sh-lamp-switch" aria-hidden="true">
-                                    <span class="sh-lamp-switch-thumb"></span>
-                                </span>
                             </span>
                         </button>
                     </div>
@@ -2415,9 +2431,6 @@ const roomsTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Raumzuordnung aus SQLite und bekannten Gerätedaten.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="refresh">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -2473,9 +2486,6 @@ const deviceDetailTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Kompakte technische Sicht mit Direktbedienung, Zuordnung und Zeitreihen.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="reload">Neu laden</button>
                 <a class="sh-btn sh-btn-muted" href="/dashboard/geraete">Zur Geräteübersicht</a>
@@ -2586,20 +2596,20 @@ const deviceDetailTemplate = `
                                     type="button"
                                     :aria-pressed="relay.active ? 'true' : 'false'"
                                     @click="relaySet(relay.key, !relay.active)">
-                                    <span class="sh-lamp-shell">
-                                        <span class="sh-lamp-visual">
-                                            <i :class="'mdi ' + relay.icon"></i>
+                                    <span class="sh-lamp-art" aria-hidden="true">
+                                        <span class="sh-lamp-glow"></span>
+                                        <span class="sh-lamp-bulb">
+                                            <span class="sh-lamp-filament"></span>
                                         </span>
-                                        <span class="sh-lamp-copy">
-                                            <strong>{{ relay.label }}</strong>
-                                            <small>{{ relay.action_label }}</small>
-                                        </span>
+                                        <span class="sh-lamp-cap"></span>
+                                        <span class="sh-lamp-base"></span>
                                     </span>
-                                    <span class="sh-lamp-side">
+                                    <span class="sh-lamp-copy">
+                                        <strong>{{ relay.label }}</strong>
+                                        <small>{{ relay.action_label }}</small>
+                                    </span>
+                                    <span class="sh-lamp-state-row">
                                         <span class="sh-lamp-state-pill">{{ relay.state_label }}</span>
-                                        <span class="sh-lamp-switch" aria-hidden="true">
-                                            <span class="sh-lamp-switch-thumb"></span>
-                                        </span>
                                     </span>
                                 </button>
                             </div>
@@ -3006,9 +3016,6 @@ const chartsTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Sensorverläufe aus Influx für ausgewählte Geräte.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="refreshDevices">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -3292,9 +3299,6 @@ const weatherTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Open-Meteo-Setup für den Server. Live-Wetter ist noch nicht verdrahtet.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="reload">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -3410,13 +3414,447 @@ export default {
 ${dashboardSharedStyle}
 `;
 
+const headerTemplate = `
+<template>
+    <div class="sh-global-strip-shell">
+        <div class="sh-global-strip">
+            <div class="sh-header-spacer" aria-hidden="true"></div>
+            <div class="sh-header-notice" :class="{ 'is-open': noticeOpen }">
+                <button
+                    class="sh-header-notice-button"
+                    type="button"
+                    aria-haspopup="dialog"
+                    :aria-expanded="noticeOpen ? 'true' : 'false'"
+                    @click.stop="toggleNotice">
+                    <i class="mdi mdi-bell-outline" aria-hidden="true"></i>
+                    <span class="sh-header-notice-count">{{ noticeCount }}</span>
+                </button>
+                <div class="sh-header-notice-panel" v-if="noticeOpen">
+                    <strong>Benachrichtigungen</strong>
+                    <p>{{ notificationLabel }}</p>
+                </div>
+            </div>
+            <div class="sh-header-weather" :class="'is-' + weatherMode" :title="weatherTooltip">
+                <span class="sh-header-weather-icon" :class="'is-' + weatherMode" aria-hidden="true">
+                    <i :class="'mdi ' + weatherIcon"></i>
+                </span>
+                <span class="sh-header-weather-copy">
+                    <strong>{{ weatherHeadline }}</strong>
+                    <span class="sh-header-weather-meta">
+                        <span
+                            class="sh-header-weather-token"
+                            v-for="(token, index) in weatherTokens"
+                            :key="token + '-' + index">
+                            {{ token }}
+                        </span>
+                    </span>
+                </span>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script>
+export default {
+    data() {
+        return {
+            payload: {
+                weather: {},
+                notifications: {
+                    count: 0,
+                    label: "Noch kein Benachrichtigungskanal in V1."
+                }
+            },
+            noticeOpen: false,
+            nowTs: Date.now()
+        };
+    },
+    computed: {
+        weather() {
+            return this.payload?.weather || {};
+        },
+        weatherMode() {
+            return this.weather.icon_mode || "inactive";
+        },
+        weatherIcon() {
+            if (this.weatherMode === "configured") return "mdi-weather-partly-cloudy";
+            if (this.weatherMode === "pending") return "mdi-weather-cloudy-alert";
+            return "mdi-weather-cloudy-off";
+        },
+        weatherHeadline() {
+            const location = this.weather.location_label || this.weather.coords_label || "";
+            if (this.weather.enabled && location) return location;
+            if (this.weather.enabled) return "Wetter aktiv";
+            if (location) return location;
+            return "Wetter inaktiv";
+        },
+        weatherAgeText() {
+            return this.formatAgeLabel(this.weather.updated_at, this.weather.age_fallback || "Stand -");
+        },
+        weatherTokens() {
+            const tokens = [];
+            const provider = this.weather.provider_label || "";
+            if (provider && provider !== this.weatherHeadline) tokens.push(provider);
+            if (this.weather.enabled && this.weather.poll_label) tokens.push(this.weather.poll_label);
+            if (this.weather.enabled && this.weather.status_note) tokens.push(this.weather.status_note);
+            tokens.push(this.weatherAgeText);
+            return tokens.filter(Boolean).slice(0, 4);
+        },
+        weatherTooltip() {
+            return this.weather.tooltip || "";
+        },
+        noticeCount() {
+            const count = Number(this.payload?.notifications?.count);
+            return Number.isFinite(count) ? Math.max(0, count) : 0;
+        },
+        notificationLabel() {
+            return this.payload?.notifications?.label || "Noch kein Benachrichtigungskanal in V1.";
+        }
+    },
+    methods: {
+        reload() {
+            this.send({ payload: { view: "header", action: "load" } });
+        },
+        toggleNotice() {
+            this.noticeOpen = !this.noticeOpen;
+        },
+        handleDocumentClick(event) {
+            const target = event?.target;
+            if (target && typeof target.closest === "function" && target.closest(".sh-header-notice")) {
+                return;
+            }
+            this.noticeOpen = false;
+        },
+        parseTimestamp(value) {
+            const text = typeof value === "string" ? value.trim() : "";
+            if (!text) return null;
+            const normalized = text.includes("T") || text.endsWith("Z")
+                ? text
+                : text.replace(" ", "T") + "Z";
+            const tsMs = Date.parse(normalized);
+            return Number.isFinite(tsMs) ? tsMs : null;
+        },
+        formatDateLabel(value) {
+            const tsMs = this.parseTimestamp(value);
+            if (tsMs === null) return "-";
+            return new Intl.DateTimeFormat("de-DE", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit"
+            }).format(new Date(tsMs));
+        },
+        formatAgeLabel(value, fallback) {
+            const tsMs = this.parseTimestamp(value);
+            if (tsMs === null) return fallback;
+            const ageMs = this.nowTs - tsMs;
+            if (!Number.isFinite(ageMs) || ageMs < 0) {
+                return "Stand " + this.formatDateLabel(value);
+            }
+            const ageSeconds = Math.max(1, Math.floor(ageMs / 1000));
+            if (ageSeconds < 60) return "Stand " + ageSeconds + " s";
+            const ageMinutes = Math.floor(ageSeconds / 60);
+            if (ageMinutes < 60) return "Stand " + ageMinutes + " min";
+            const ageHours = Math.floor(ageMinutes / 60);
+            if (ageHours < 24) return "Stand " + ageHours + " h";
+            const ageDays = Math.floor(ageHours / 24);
+            if (ageDays < 7) return "Stand " + ageDays + " d";
+            return "Stand " + this.formatDateLabel(value);
+        }
+    },
+    watch: {
+        msg: {
+            immediate: true,
+            handler(value) {
+                const payload = value?.payload || {};
+                if (payload.kind === "header") {
+                    this.payload = payload;
+                }
+            }
+        }
+    },
+    mounted() {
+        setTimeout(() => this.reload(), 120);
+        this._timer = setInterval(() => {
+            this.nowTs = Date.now();
+        }, 30000);
+        document.addEventListener("click", this.handleDocumentClick);
+    },
+    unmounted() {
+        if (this._timer) clearInterval(this._timer);
+        document.removeEventListener("click", this.handleDocumentClick);
+    }
+}
+</script>
+
+<style>
+    .v-main > .nrdb-layout--grid.nrdb-ui-page {
+        padding-top: 3.15rem;
+    }
+
+    .sh-global-strip-shell {
+        position: fixed;
+        top: 4.15rem;
+        left: 0;
+        right: 0;
+        z-index: 6;
+        padding: 0 0.75rem;
+        pointer-events: none;
+    }
+
+    .sh-global-strip {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        min-height: 2.5rem;
+        max-width: min(72rem, calc(100vw - 2rem));
+        margin-left: auto;
+    }
+
+    .sh-header-spacer {
+        flex: 1 1 auto;
+    }
+
+    .sh-header-weather {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.58rem;
+        min-width: 0;
+        max-width: min(32rem, calc(100vw - 9rem));
+        padding: 0.34rem 0.72rem 0.34rem 0.56rem;
+        border-radius: 999px;
+        border: 1px solid rgba(54, 72, 90, 0.84);
+        background: linear-gradient(180deg, rgba(23, 34, 46, 0.94), rgba(12, 18, 26, 0.98));
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        pointer-events: auto;
+    }
+
+    .sh-header-weather.is-configured {
+        border-color: rgba(181, 152, 86, 0.68);
+        background: linear-gradient(180deg, rgba(49, 40, 20, 0.94), rgba(25, 18, 8, 0.98));
+    }
+
+    .sh-header-weather.is-pending {
+        border-color: rgba(81, 104, 126, 0.76);
+    }
+
+    .sh-header-weather-icon {
+        flex: 0 0 auto;
+        width: 1.9rem;
+        height: 1.9rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: rgba(19, 28, 38, 0.76);
+        border: 1px solid rgba(63, 81, 99, 0.82);
+        color: #8ca0b3;
+    }
+
+    .sh-header-weather-icon i {
+        font-size: 1.1rem;
+    }
+
+    .sh-header-weather-icon.is-configured {
+        color: #ffd869;
+        border-color: rgba(232, 191, 93, 0.76);
+        background: rgba(74, 55, 18, 0.92);
+    }
+
+    .sh-header-weather-icon.is-configured i {
+        animation: shHeaderWeatherFloat 3s ease-in-out infinite;
+    }
+
+    .sh-header-weather-icon.is-pending {
+        color: #bfd0e2;
+    }
+
+    .sh-header-weather-icon.is-pending i {
+        animation: shHeaderWeatherPulse 1.9s ease-in-out infinite;
+    }
+
+    .sh-header-weather-copy {
+        min-width: 0;
+        display: grid;
+        gap: 0.08rem;
+    }
+
+    .sh-header-weather-copy strong {
+        font-size: 0.82rem;
+        line-height: 1.05;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .sh-header-weather-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.36rem;
+        min-width: 0;
+        font-size: 0.72rem;
+        color: rgba(195, 210, 224, 0.88);
+        white-space: nowrap;
+        overflow: hidden;
+    }
+
+    .sh-header-weather-token {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .sh-header-weather-token + .sh-header-weather-token::before {
+        content: "•";
+        margin-right: 0.36rem;
+        color: rgba(126, 147, 166, 0.84);
+    }
+
+    .sh-header-notice {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+        pointer-events: auto;
+    }
+
+    .sh-header-notice-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 4rem;
+        justify-content: center;
+        padding: 0.34rem 0.68rem;
+        border: 1px solid rgba(59, 77, 96, 0.84);
+        border-radius: 999px;
+        background: linear-gradient(180deg, rgba(20, 30, 41, 0.94), rgba(11, 17, 25, 0.98));
+        color: #d3e1ef;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .sh-header-notice-button:hover {
+        border-color: rgba(91, 114, 137, 0.84);
+    }
+
+    .sh-header-notice-count {
+        min-width: 1.3rem;
+        height: 1.3rem;
+        padding: 0 0.28rem;
+        border-radius: 999px;
+        background: rgba(44, 59, 73, 0.96);
+        border: 1px solid rgba(87, 106, 126, 0.88);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    .sh-header-notice-panel {
+        position: absolute;
+        left: 50%;
+        top: calc(100% + 0.45rem);
+        transform: translateX(-50%);
+        width: 15rem;
+        padding: 0.7rem 0.78rem;
+        border-radius: 16px;
+        border: 1px solid rgba(53, 71, 90, 0.92);
+        background: linear-gradient(180deg, rgba(20, 30, 41, 0.98), rgba(11, 17, 24, 0.99));
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.26);
+    }
+
+    .sh-header-notice-panel strong {
+        display: block;
+        font-size: 0.83rem;
+        margin-bottom: 0.18rem;
+    }
+
+    .sh-header-notice-panel p {
+        margin: 0;
+        font-size: 0.77rem;
+        color: rgba(196, 211, 224, 0.88);
+        line-height: 1.35;
+    }
+
+    @keyframes shHeaderWeatherFloat {
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-1px);
+        }
+    }
+
+    @keyframes shHeaderWeatherPulse {
+        0%,
+        100% {
+            opacity: 0.86;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 1;
+            transform: scale(1.04);
+        }
+    }
+
+    @media (max-width: 1100px) {
+        .sh-header-notice {
+            left: calc(50% - 1rem);
+        }
+
+        .sh-header-weather {
+            max-width: 18rem;
+        }
+
+        .sh-header-weather-token:nth-child(1) {
+            display: none;
+        }
+    }
+
+    @media (max-width: 760px) {
+        .v-main > .nrdb-layout--grid.nrdb-ui-page {
+            padding-top: 2.95rem;
+        }
+
+        .sh-global-strip-shell {
+            top: 3.95rem;
+            padding: 0 0.5rem;
+        }
+
+        .sh-header-notice {
+            display: none;
+        }
+
+        .sh-header-weather {
+            max-width: calc(100vw - 1rem);
+            padding-right: 0.58rem;
+        }
+
+        .sh-header-weather-copy strong {
+            font-size: 0.78rem;
+        }
+
+        .sh-header-weather-meta {
+            font-size: 0.69rem;
+        }
+
+        .sh-header-weather-token:nth-child(2),
+        .sh-header-weather-token:nth-child(3) {
+            display: none;
+        }
+    }
+</style>
+`;
+
 const automationsTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Zeit- und Sensortrigger für die aktuelle Serverbasis.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="reload">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -3644,9 +4082,6 @@ const configTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Schreibbare Pfade und technische SQLite-Sicht für das reale Dashboard.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="reload">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -3766,9 +4201,6 @@ const logsTemplate = `
 <template>
     <div class="sh-page">
         <div class="sh-toolbar">
-            <div>
-                <p class="sh-muted">Letzte SQLite-Auditzeilen für Ingest und Egress.</p>
-            </div>
             <div class="sh-toolbar-actions">
                 <button class="sh-btn sh-btn-muted" @click="reload">Neu laden</button>
                 ${renderDashboardNavHtml()}
@@ -4143,17 +4575,21 @@ const dashboardCommonHelperLines = [
     '    if (numberValue === null) return null;',
     '    return Math.max(0, Math.min(100, Math.round(numberValue)));',
     '};',
+    'const isMasterDevice = (deviceInfo = {}) => {',
+    '    const deviceRole = normalizeString(deviceInfo.device_role).toLowerCase();',
+    '    const deviceClass = normalizeString(deviceInfo.device_class).toLowerCase();',
+    '    return deviceRole === "master" || /master/.test(deviceClass);',
+    '};',
     'const classifyDeviceVisual = (deviceInfo = {}, options = {}) => {',
     '    const controlKind = normalizeString(options.controlKind);',
     '    const relayCount = normalizeNumber(options.relayCount) || 0;',
     '    const sensorCount = normalizeNumber(options.sensorCount) || 0;',
-    '    const deviceRole = normalizeString(deviceInfo.device_role).toLowerCase();',
     '    const deviceClass = normalizeString(deviceInfo.device_class).toLowerCase();',
     '    const hardwareType = normalizeString(deviceInfo.hardware_type).toLowerCase();',
     '    const powerSource = normalizeString(deviceInfo.power_source).toLowerCase();',
     '    if (controlKind === "cover") return { kind_label: "Rollladen", type_icon: "mdi-window-shutter", surface_class: "is-cover-card" };',
     '    if (controlKind === "relay") return { kind_label: relayCount > 1 ? "Relais 2-fach" : "Relais", type_icon: relayCount > 1 ? "mdi-lightbulb-group-outline" : "mdi-lightbulb-outline", surface_class: "is-relay-card" };',
-    '    if (deviceRole === "master" || /master/.test(deviceClass)) return { kind_label: "Bridge", type_icon: "mdi-router-wireless", surface_class: "is-master-card" };',
+    '    if (isMasterDevice(deviceInfo)) return { kind_label: "Bridge", type_icon: "mdi-router-wireless", surface_class: "is-master-card" };',
     '    if (sensorCount > 0 && (powerSource === "battery" || /bat_sen/.test(deviceClass) || /battery/.test(hardwareType))) return { kind_label: "Batteriesensor", type_icon: "mdi-home-battery-outline", surface_class: "is-battery-card" };',
     '    if (sensorCount > 0) return { kind_label: "Sensor", type_icon: "mdi-thermometer-lines", surface_class: "is-sensor-card" };',
     '    if (powerSource === "battery") return { kind_label: "Batteriegerät", type_icon: "mdi-battery-outline", surface_class: "is-battery-card" };',
@@ -4644,12 +5080,10 @@ const devices = Array.from(byDevice.values()).map((device) => {
     return device;
 });
 
+const overviewDevices = devices.filter((device) => !isMasterDevice(device));
 const summary = {
-    total_devices: devices.length,
-    online_devices: devices.filter((device) => device.online_label === "online").length,
-    offline_devices: devices.filter((device) => device.online_label === "offline").length,
-    sensor_devices: devices.filter((device) => device.sensor_metrics.length > 0).length,
-    actuator_devices: devices.filter((device) => !!device.controls).length
+    device_count: overviewDevices.length,
+    master_count: devices.filter((device) => isMasterDevice(device)).length
 };
 
 const weather = rows.length ? {
@@ -4687,7 +5121,7 @@ for (const device of devices) {
 }
 
 const view = msg.dashboardView || "overview";
-let filteredDevices = devices;
+let filteredDevices = view === "overview" ? overviewDevices : devices;
 let page = { key: view, show_controls: true };
 if (view === "devices") {
     page.title = "Geräte";
@@ -4706,6 +5140,7 @@ if (view === "devices") {
     filteredDevices = devices.filter((device) => device.chart_metrics.length > 0);
 } else {
     page.title = "Übersicht";
+    filteredDevices = overviewDevices;
 }
 
 msg.payload = {
@@ -5333,6 +5768,78 @@ const routePostWeatherWriteFunc = String.raw`
 if (!msg.dashboardReload || msg.dashboardReload.type !== "weather") {
     return null;
 }
+return msg;
+`;
+
+const routeHeaderActionFunc = String.raw`
+const request = msg.payload || {};
+if (request.action === "load") {
+    return msg;
+}
+return null;
+`;
+
+const buildHeaderQueryFunc = String.raw`
+msg.topic = [
+    "SELECT",
+    "    provider,",
+    "    location_label,",
+    "    latitude,",
+    "    longitude,",
+    "    poll_interval_minutes,",
+    "    enabled,",
+    "    units,",
+    "    updated_at",
+    "FROM weather_settings",
+    "WHERE id = 1;"
+].join(" ");
+return msg;
+`;
+
+const buildHeaderPayloadFunc = String.raw`
+${dashboardCommonHelperLines.join("\n")}
+const rows = Array.isArray(msg.payload) ? msg.payload : [];
+const row = rows[0] || {};
+const latitude = normalizeNumber(row.latitude);
+const longitude = normalizeNumber(row.longitude);
+const locationLabel = normalizeString(row.location_label);
+const coordsLabel = latitude !== null && longitude !== null
+    ? String(latitude) + ", " + String(longitude)
+    : "";
+const updatedAtText = normalizeString(row.updated_at);
+const updatedAtIso = updatedAtText && !updatedAtText.includes("T")
+    ? updatedAtText.replace(" ", "T") + "Z"
+    : updatedAtText;
+const enabled = normalizeBool(row.enabled) === true;
+const configured = !!locationLabel || !!coordsLabel;
+
+msg.payload = {
+    kind: "header",
+    notifications: {
+        count: 0,
+        label: "V1 hat bewusst noch keinen Benachrichtigungskanal. Der Header-Platzhalter ist nur die vorbereitete UI-Spur."
+    },
+    weather: {
+        enabled,
+        configured,
+        provider_label: normalizeString(row.provider) || "open-meteo",
+        location_label: locationLabel,
+        coords_label: coordsLabel,
+        poll_label: String(normalizeNumber(row.poll_interval_minutes) || 15) + " min",
+        units_label: normalizeString(row.units) || "metric",
+        updated_at: updatedAtIso,
+        age_fallback: updatedAtIso ? formatRelativeSeenLabel(updatedAtIso) : "Stand -",
+        status_note: enabled
+            ? (configured ? "Kein Live-Feed" : "Kein Ort gesetzt")
+            : "Noch nicht aktiviert",
+        icon_mode: enabled
+            ? (configured ? "configured" : "pending")
+            : "inactive",
+        tooltip: enabled
+            ? "Wetter-Setup ist aktiv, aber der produktive Live-Feed ist im aktuellen Serverpfad noch nicht vorhanden."
+            : "Wetter ist aktuell nicht aktiviert."
+    }
+};
 return msg;
 `;
 
@@ -6205,7 +6712,7 @@ addNode({
         width,
         height,
         order,
-        showTitle: true,
+        showTitle: false,
         className: "",
         visible: true,
         disabled: false,
@@ -6760,8 +7267,28 @@ addNode({
     wires: [[]]
 });
 
+addNode({
+    id: ids.uiTemplateHeader,
+    type: "ui-template",
+    z: ids.tabDashboardUi,
+    ui: ids.uiBase,
+    name: "Global Header",
+    order: 0,
+    width: 0,
+    height: 0,
+    format: headerTemplate,
+    storeOutMessages: true,
+    passthru: false,
+    resendOnRefresh: true,
+    templateScope: "widget:ui",
+    className: "",
+    x: 250,
+    y: 320,
+    wires: [[ids.routeHeaderAction]]
+});
+
 [
-    { id: ids.uiTemplateOverview, group: ids.uiGroupOverview, name: "Overview View", order: 1, height: 18, format: buildDeviceGridTemplate({ viewKey: "overview", title: "Übersicht", intro: "Kompakte Geräteübersicht mit Direktbedienung.", emptyText: "Noch keine Geräte in SQLite sichtbar." }) },
+    { id: ids.uiTemplateOverview, group: ids.uiGroupOverview, name: "Overview View", order: 1, height: 18, format: buildDeviceGridTemplate({ viewKey: "overview", title: "Übersicht", intro: "Kompakte Geräteübersicht mit Direktbedienung.", emptyText: "Noch keine Gerätekarten sichtbar. Master werden nur oben gezählt." }) },
     { id: ids.uiTemplateDevices, group: ids.uiGroupDevices, name: "Devices View", order: 1, height: 18, format: buildDeviceGridTemplate({ viewKey: "devices", title: "Geräte", intro: "Alle bekannten Geräte mit Detailzugriff.", emptyText: "Keine Geräte vorhanden." }) },
     { id: ids.uiTemplateSensors, group: ids.uiGroupSensors, name: "Sensors View", order: 1, height: 18, format: buildDeviceGridTemplate({ viewKey: "sensors", title: "Sensoren", intro: "Gefilterte Sicht auf Sensorgeräte und letzte Werte.", emptyText: "Keine Sensorgeräte erkannt." }) },
     { id: ids.uiTemplateActors, group: ids.uiGroupActors, name: "Actors View", order: 1, height: 18, format: buildDeviceGridTemplate({ viewKey: "actors", title: "Aktoren", intro: "Schaltbare Geräte mit direktem cmd/set-Pfad.", emptyText: "Keine schaltbaren Aktoren erkannt." }) },
@@ -7230,7 +7757,68 @@ addNode({
     libs: [],
     x: 905,
     y: 1230,
-    wires: [[ids.buildWeatherQuery]]
+    wires: [[ids.buildWeatherQuery, ids.buildHeaderQuery]]
+});
+
+addNode({
+    id: ids.routeHeaderAction,
+    type: "function",
+    z: ids.tabDashboardUi,
+    name: "Route Header Action",
+    func: routeHeaderActionFunc,
+    outputs: 1,
+    noerr: 0,
+    initialize: "",
+    finalize: "",
+    libs: [],
+    x: 560,
+    y: 1280,
+    wires: [[ids.buildHeaderQuery]]
+});
+
+addNode({
+    id: ids.buildHeaderQuery,
+    type: "function",
+    z: ids.tabDashboardUi,
+    name: "Build Header Query",
+    func: buildHeaderQueryFunc,
+    outputs: 1,
+    noerr: 0,
+    initialize: "",
+    finalize: "",
+    libs: [],
+    x: 855,
+    y: 1280,
+    wires: [[ids.sqliteHeaderQuery]]
+});
+
+addNode({
+    id: ids.sqliteHeaderQuery,
+    type: "sqlite",
+    z: ids.tabDashboardUi,
+    mydb: ids.sqliteDb,
+    sqlquery: "msg.topic",
+    sql: "",
+    name: "Read Header Data",
+    x: 1125,
+    y: 1280,
+    wires: [[ids.buildHeaderPayload]]
+});
+
+addNode({
+    id: ids.buildHeaderPayload,
+    type: "function",
+    z: ids.tabDashboardUi,
+    name: "Build Header Payload",
+    func: buildHeaderPayloadFunc,
+    outputs: 1,
+    noerr: 0,
+    initialize: "",
+    finalize: "",
+    libs: [],
+    x: 890,
+    y: 1360,
+    wires: [[ids.uiTemplateHeader]]
 });
 
 addNode({
