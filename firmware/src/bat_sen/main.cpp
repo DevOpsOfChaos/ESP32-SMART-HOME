@@ -3,7 +3,7 @@
  Projekt   : SmartHome ESP32
  Geraet    : BAT-SEN (Batteriebetrieben, Sensor/Event-Basis)
  Datei     : main.cpp
- Version   : 0.2.3
+ Version   : 0.2.4
  Stand     : 2026-03-12
 
  Funktion:
@@ -45,7 +45,7 @@
 
 constexpr bool DEBUG_LOKAL_AKTIV = DEVICE_DEBUG_AKTIV && DEBUG_AKTIV;
 constexpr char DATEI_GERAET[] = "BAT-SEN";
-constexpr char DATEI_VERSION[] = "0.2.3";
+constexpr char DATEI_VERSION[] = "0.2.4";
 const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 struct BatteryProfileConfig {
@@ -65,6 +65,7 @@ struct NodeState {
     bool letzter_button_4;
     bool state_report_offen;
     uint8_t batterie_pct;
+    uint16_t batterie_adc_mv;
     uint16_t batterie_mv;
     uint16_t rain_raw;
     uint8_t button_flags;
@@ -101,7 +102,7 @@ uint8_t berechneBatterieProzent(uint16_t batterieMv) {
     return (uint8_t)((((uint32_t)batterieMv - profil.leer_mv) * 100UL) / ((uint32_t)profil.voll_mv - profil.leer_mv));
 }
 
-uint16_t leseBatterieMillivolt() {
+uint16_t leseBatterieMillivolt(uint16_t* adcEingangMvOut) {
     // V1 knows only the fixed GPIO4 battery divider: 100k / 100k => ADC sees VBAT / 2.
     // `analogReadMilliVolts()` uses the Arduino/ESP32 calibration path when available,
     // but board-specific ADC accuracy is still not hardware-validated for this device.
@@ -111,6 +112,9 @@ uint16_t leseBatterieMillivolt() {
     }
 
     uint32_t adcEingangMv = (adcSummeMv + (BATTERY_ADC_SAMPLE_COUNT / 2U)) / BATTERY_ADC_SAMPLE_COUNT;
+    if (adcEingangMvOut != nullptr) {
+        *adcEingangMvOut = (adcEingangMv > 65535UL) ? 65535U : (uint16_t)adcEingangMv;
+    }
     if (adcEingangMv == 0UL) {
         return 0U;
     }
@@ -124,6 +128,32 @@ uint16_t leseBatterieMillivolt() {
     }
 
     return (uint16_t)batterieMv;
+}
+
+void logf(const char* level, const char* format, ...);
+
+void logBatterieMessung(const char* kontext) {
+    if (!DEBUG_LOKAL_AKTIV) return;
+
+    BatteryProfileConfig profil = holeBatterieProfil();
+    if (nodeStatus.batterie_mv == 0U || nodeStatus.batterie_pct == 0xFFU) {
+        logf(
+            "INFO",
+            "%s profil=%s adc_mv=%u battery_mv=0 battery_pct=unbekannt",
+            kontext,
+            profil.name,
+            (unsigned)nodeStatus.batterie_adc_mv);
+        return;
+    }
+
+    logf(
+        "INFO",
+        "%s profil=%s adc_mv=%u battery_mv=%u battery_pct=%u",
+        kontext,
+        profil.name,
+        (unsigned)nodeStatus.batterie_adc_mv,
+        (unsigned)nodeStatus.batterie_mv,
+        (unsigned)nodeStatus.batterie_pct);
 }
 
 void logf(const char* level, const char* format, ...) {
@@ -268,6 +298,7 @@ bool sendeStateReport() {
     payload.rain_raw = (PIN_RAIN_ADC >= 0) ? nodeStatus.rain_raw : 0xFFFFU;
     payload.button_flags = nodeStatus.button_flags;
     payload.fault = nodeStatus.fault ? 1U : 0U;
+    logBatterieMessung("STATE_REPORT Werte");
 
     if (sendePaket(nodeStatus.master_mac, SH_MSG_STATE, &payload, sizeof(payload), "STATE_REPORT")) {
         nodeStatus.state_report_offen = false;
@@ -307,6 +338,7 @@ void initialisiereHardware() {
     }
 
     nodeStatus.batterie_pct = 0xFFU;
+    nodeStatus.batterie_adc_mv = 0U;
     nodeStatus.batterie_mv = 0U;
     nodeStatus.rain_raw = 0xFFFFU;
     nodeStatus.button_flags = 0U;
@@ -352,17 +384,25 @@ void gibStartmeldungAus() {
     BatteryProfileConfig profil = holeBatterieProfil();
     Serial.print("Batterieprofil: ");
     Serial.println(profil.name);
+    Serial.print("Batterieprofil-Fenster: ");
+    Serial.print(profil.leer_mv);
+    Serial.print("..");
+    Serial.print(profil.voll_mv);
+    Serial.println(" mV");
     Serial.println("================================");
 }
 
 void messeBatterie() {
     if (PIN_BATTERY_ADC < 0) {
         nodeStatus.batterie_pct = 0xFFU;
+        nodeStatus.batterie_adc_mv = 0U;
         nodeStatus.batterie_mv = 0U;
         return;
     }
 
-    uint16_t batterieMv = leseBatterieMillivolt();
+    uint16_t adcEingangMv = 0U;
+    uint16_t batterieMv = leseBatterieMillivolt(&adcEingangMv);
+    nodeStatus.batterie_adc_mv = adcEingangMv;
     if (batterieMv == 0U) {
         nodeStatus.batterie_pct = 0xFFU;
         nodeStatus.batterie_mv = 0U;
@@ -508,6 +548,7 @@ void setup() {
     initialisiereHardware();
     initialisiereFunk();
     messeBatterie();
+    logBatterieMessung("BOOT Batterie");
 
     esp_now_register_send_cb(onEspNowSent);
     esp_now_register_recv_cb(onEspNowReceive);

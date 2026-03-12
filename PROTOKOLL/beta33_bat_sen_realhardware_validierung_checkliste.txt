@@ -1,0 +1,57 @@
+Stand: beta33
+Datei: beta33_bat_sen_realhardware_validierung_checkliste.txt
+Datum: 2026-03-12
+Autor: Codex
+Status: Vorbereitung fuer realen Hardwarelauf, kein Nachweis
+
+1. Ziel
+- Den vorhandenen `bat_sen`-ADC-Pfad auf dem echten Geraet gegen reale Messung plausibilisieren.
+- Kein Feature-Ausbau. Nur Profilwahl, ADC-Wert, `battery_mv` und `battery_pct` sauber gegen die reale Hardware halten.
+
+2. Vor dem Flash
+- Portzuordnung real pruefen, nicht raten:
+  - `master` mutmasslich auf `COM3`, vor dem Lauf bestaetigen
+  - das zweite ESP32-C3-Board bewusst als `bat_sen` verwenden
+- Am `bat_sen`-Board die reale Batterieart festlegen:
+  - `BAT_PROFILE_COIN_3V_PRIMARY`
+  - `BAT_PROFILE_ALKALINE_2X`
+  - `BAT_PROFILE_LIION_1S`
+- Nur dann flashen. Den Default `coin_3v_primary` nicht still als Wahrheit behandeln.
+
+3. Beim lokalen seriellen Bring-up notieren
+- Startbanner:
+  - `Node-ID`
+  - `Batterieprofil`
+  - `Batterieprofil-Fenster`
+- Boot-Messzeile:
+  - `BOOT Batterie profil=...`
+  - `adc_mv=...`
+  - `battery_mv=...`
+  - `battery_pct=...`
+- Nach `HELLO_ACK` die erste `STATE_REPORT Werte ...`-Zeile mit denselben Feldern notieren.
+
+4. Reale Messpunkte mit Multimeter
+- Batteriespannung direkt an den Batterieklemmen messen und in `mV` notieren.
+- ADC-Knoten gegen GND messen, also den Teiler-Mittelpunkt am `GPIO4`-Pfad, und in `mV` notieren.
+- Erwartung fuer den V1-Teiler `100k / 100k`:
+  - `GPIO4` sollte ungefaehr `VBAT / 2` sehen.
+  - `battery_mv` in der Firmware sollte ungefaehr `2 * adc_mv` ergeben.
+
+5. Vergleich, der wirklich zaehlt
+- `adc_mv` seriell gegen Multimeter am ADC-Knoten vergleichen.
+- `battery_mv` seriell gegen Multimeter direkt an der Batterie vergleichen.
+- `battery_pct` nur als Profilableitung bewerten, nicht als Naturgesetz.
+- Wenn `battery_mv` halbwegs passt, aber `battery_pct` unplausibel ist, ist zuerst die Profilwahl falsch und nicht automatisch der ADC-Pfad.
+
+6. Minimaler Erfolgsnachweis fuer den ersten echten Lauf
+- `bat_sen` bootet real und sendet `HELLO`.
+- `master` antwortet real mit `HELLO_ACK`.
+- `bat_sen` sendet einen `STATE_REPORT`.
+- Die serielle Zeile `STATE_REPORT Werte ...` ist mit real gemessenen Spannungen plausibel.
+- Erst danach lohnt ein offizieller Nachweis ueber MQTT/Serverpfad.
+
+7. Was kein sauberer Abschluss ist
+- Nur Build ohne Flash.
+- Nur serielle Ausgabe ohne Multimetervergleich.
+- Nur Serversicht mit bereits bekannten `battery_mv`/`battery_pct`-Feldern.
+- Ein Prozentwert, der gut aussieht, obwohl Profil oder Messpunkt nicht verifiziert sind.
