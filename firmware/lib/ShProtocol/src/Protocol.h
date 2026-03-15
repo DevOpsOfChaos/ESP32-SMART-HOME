@@ -422,6 +422,12 @@
 // Verbindungsfehler (ACK-Ausfall nach Retry-Limit).
 #define SH_EVENT_COMM_FAULT           0x10U
 
+// Manueller Taster stabil losgelassen.
+#define SH_EVENT_BUTTON_RELEASE       0x11U
+
+// Manueller Taster hat die Long-Press-Schwelle erreicht.
+#define SH_EVENT_BUTTON_LONG_PRESS    0x12U
+
 // ============================================================
 // Auslöserquellen / Schaltgründe (SH_TRIGGER_*)
 // ============================================================

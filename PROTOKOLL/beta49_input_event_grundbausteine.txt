@@ -1,0 +1,66 @@
+Stand: beta49
+Datei: beta49_input_event_grundbausteine.txt
+Datum: 2026-03-15
+Autor: Projektdokumentation
+Status: Gemeinsame Input-/Event-Grundbausteine fuer debouncte Reed-/Button-Pfade compile-validiert; kein neuer Hardware- oder Deep-Sleep-Nachweis
+
+1. Anlass
+- Die Night-Stage fuer den fruehen Input-/Event-Unterbau war zuvor blockiert, weil sie zu hart an nicht vorhandene Altdateien gebunden war.
+- Im aktuellen Repo-Stand existierten fuer `bat_sen` zwar schon optionale Reed-/Button-Provider, aber nur als rohe Pin-Abfrage ohne gemeinsame Debounce-, Release- oder Hold-Grundlage.
+- Fuer kommende Fenster-/Tuermodule, Wandschalter und digitale Touch-/Trigger-Varianten waere das wieder dieselbe alte Falle geworden:
+  pro Geraet eigene Tasterlogik statt eines kleinen gemeinsamen Unterbaus.
+
+2. Aenderung
+- Neue Shared-Datei `firmware/lib/ShSensors/src/DigitalInputSupport.h` eingefuehrt.
+- Diese Schicht kapselt fuer einfache digitale Eingangssignale jetzt:
+  - stabile Aktiv-/Release-Erkennung
+  - grundlegende Entprellung
+  - Hold-/Long-Press-Zustand mit einmaligem Long-Press-Edge
+  - kleine Maskenstruktur fuer Mehrkanal-Eingaenge
+- `firmware/lib/ShSensors/src/BatSenModules.h` nutzt diese gemeinsame Schicht jetzt fuer:
+  - `ReedProvider<...PIN>`
+  - `ButtonProvider<...PIN>`
+- `bat_sen/main.cpp` uebernimmt jetzt die reicheren Shared-Updates statt roher Pin-Flanken:
+  - stabile Reed-Open/Close-State-Synchronisierung
+  - debouncte Button-Presses
+  - neue Button-Release-Events
+  - neue Button-Long-Press-Events
+- `master/main.cpp` kennt die neuen Eventnamen jetzt ebenfalls fuer MQTT-Weitergabe.
+- `bat_sen/AppConfig.h` fuehrt konservative gemeinsame Defaultwerte fuer Debounce und Long-Press ein sowie konfigurierbare Polaritaet/Pullup-Grundlagen fuer spaetere digitale Touch-/Trigger-Varianten.
+
+3. Begruendung
+- Der richtige Schritt war hier kein weiteres Spezialgeraet und kein nostalgischer Altcode-Import, sondern ein kleiner gemeinsamer Digitalinput-Baustein.
+- Release- und Long-Press-Semantik als explizite Eventtypen ist klarer und wartbarer als magische Sonderwerte in `param2`.
+- Die Grundlage bleibt absichtlich digital und einfach. Sie behauptet weder eine fertige Touch-Zuverlaessigkeit noch eine bereits gelandete Wake-/Sleep-Produktlogik.
+
+4. Verbesserungseffekt
+- Reed- und Button-Pfade haengen jetzt an derselben kleinen Shared-State-Maschine statt an separaten rohen Polling-Sonderfaellen.
+- Mehrkanal-Buttons koennen aktive, gehaltene und bereits long-getriggerte Kanaele als Masken fuehren, ohne dass schon ein fertiges Wall-Switch-Produkt gebaut werden musste.
+- `bat_sen` kann jetzt stabile Press-, Release- und Long-Press-Ereignisse ueber den bestehenden Eventkanal nach oben geben.
+- Die neue Grundlage passt auch fuer spaetere einfache digitale Touch-/Trigger-Signale, sofern sie als digitales Aktivsignal anliegen.
+
+5. Risiken / Trade-offs
+- Kein neuer Hardware-Nachweis fuer Reed, Button oder Touch.
+- Keine ISR-Latch- oder Wake-Source-Integration in diesem Schritt; Deep-Sleep bleibt weiterhin offen.
+- Keine per-device-Sonderlogik fuer Relaismodule, Wandschalterprofile oder Rolladenbedienung.
+- Die neuen Eventtypen sind bisher nur im Firmware-/Master-Pfad vorbereitet; daraus folgt noch keine serverseitig ausgewertete Produktfunktion.
+
+6. Teststatus
+- `git diff --check` (nur CRLF-Hinweise aus dem Windows-Working-Tree, keine Whitespace-Fehler)
+- `cd firmware && & "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e master`
+- `cd firmware && & "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e bat_sen`
+- `cd firmware && & "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e bat_sen_input_stub`
+- Nicht durchgefuehrt:
+  - Realhardware-Test fuer Reed-/Button-Pfade
+  - Touch-spezifische Validierung
+  - Deep-Sleep-/Wake-Test
+
+7. Lehrerblick
+- Die Eigenleistung liegt hier in der Uebersetzung der fehlenden Stage in eine reale Shared-Schicht des aktuellen Repos:
+  gemeinsamer Digitalinput-Helfer, Mehrkanal-Masken, Event-Integration in `bat_sen` und Event-Namensweitergabe im `master`.
+- Direkter Altcode wurde dabei nicht uebernommen.
+- Als indirekte Referenz dienten nur die lokalen Night-Notes unter `private/notes/night_firmware_pipeline_prep_v4/`, insbesondere die Idee, Debounce-/Press-/Hold-Unterbau vor Spezialverhalten zu bauen und die alten 3s/6s-Halteschwellen gerade nicht zu kopieren.
+- Fachlich nachvollziehbar bleibt der Stand, weil er bewusst nur Grundbausteine liefert:
+  build-validiert ja,
+  hardwarebewiesen nein,
+  fertiges Wall-Switch-/Deep-Sleep-Produkt nein.

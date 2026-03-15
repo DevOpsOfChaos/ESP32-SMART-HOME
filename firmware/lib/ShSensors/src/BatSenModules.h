@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <stdlib.h>
 
+#include "DigitalInputSupport.h"
 #include "ProviderIds.h"
 #include "../../ShProtocol/src/DeviceTypes.h"
 
@@ -14,12 +15,15 @@ constexpr uint16_t BAT_SEN_RAIN_UNGUELTIG = 0xFFFFU;
 
 struct BatSenInputState {
     bool window_open;
-    uint8_t button_flags;
+    DigitalInputMaskState button_state;
     uint16_t rain_raw;
 };
 
 struct ReedProviderConfig {
     int pin;
+    bool active_low;
+    bool use_pullup;
+    unsigned long debounce_ms;
 };
 
 struct ButtonProviderConfig {
@@ -27,6 +31,10 @@ struct ButtonProviderConfig {
     int pin_2;
     int pin_3;
     int pin_4;
+    bool active_low;
+    bool use_pullup;
+    unsigned long debounce_ms;
+    unsigned long hold_ms;
 };
 
 struct RainProviderConfig {
@@ -37,12 +45,16 @@ struct RainProviderConfig {
 struct ReedUpdate {
     bool changed;
     bool window_open;
+    uint8_t state_flags;
 };
 
 struct ButtonUpdate {
     bool changed;
-    uint8_t button_flags;
+    DigitalInputMaskState state;
     uint8_t press_mask;
+    uint8_t release_mask;
+    uint8_t long_press_mask;
+    uint16_t duration_ms[4];
 };
 
 struct RainUpdate {
@@ -52,7 +64,7 @@ struct RainUpdate {
 
 inline void resetBatSenInputs(BatSenInputState& state) {
     state.window_open = false;
-    state.button_flags = 0U;
+    resetDigitalInputMaskState(state.button_state);
     state.rain_raw = BAT_SEN_RAIN_UNGUELTIG;
 }
 
@@ -78,38 +90,29 @@ public:
     const char* name() const { return "none"; }
 
     ReedUpdate poll() {
-        return {false, false};
+        return {false, false, 0U};
     }
 };
 
 template<>
 class ReedProvider<SH_BAT_SEN_REED_PROVIDER_PIN> {
 public:
-    explicit ReedProvider(const ReedProviderConfig& config) : pin_(config.pin) {}
+    explicit ReedProvider(const ReedProviderConfig& config)
+        : input_({config.pin, config.active_low, config.use_pullup, config.debounce_ms, 0UL}) {}
 
     void begin() {
-        if (pin_ >= 0) {
-            pinMode(pin_, INPUT_PULLUP);
-            last_window_open_ = (digitalRead(pin_) == LOW);
-        }
+        input_.begin();
     }
 
     const char* name() const { return "reed_pin"; }
 
     ReedUpdate poll() {
-        if (pin_ < 0) {
-            return {false, false};
-        }
-
-        const bool jetzt = (digitalRead(pin_) == LOW);
-        const bool changed = (jetzt != last_window_open_);
-        last_window_open_ = jetzt;
-        return {changed, jetzt};
+        const DigitalInputUpdate update = input_.poll();
+        return {update.changed, update.active, update.state_flags};
     }
 
 private:
-    int pin_ = -1;
-    bool last_window_open_ = false;
+    DigitalInputChannel input_;
 };
 
 template<>
@@ -121,7 +124,7 @@ public:
     const char* name() const { return "reed_stub"; }
 
     ReedUpdate poll() {
-        return {false, false};
+        return {false, false, 0U};
     }
 };
 
@@ -137,7 +140,8 @@ public:
     const char* name() const { return "none"; }
 
     ButtonUpdate poll() {
-        return {false, 0U, 0U};
+        ButtonUpdate update = {};
+        return update;
     }
 };
 
@@ -145,43 +149,49 @@ template<>
 class ButtonProvider<SH_BAT_SEN_BUTTON_PROVIDER_PIN> {
 public:
     explicit ButtonProvider(const ButtonProviderConfig& config) {
-        pins_[0] = config.pin_1;
-        pins_[1] = config.pin_2;
-        pins_[2] = config.pin_3;
-        pins_[3] = config.pin_4;
+        inputs_[0].configure({config.pin_1, config.active_low, config.use_pullup, config.debounce_ms, config.hold_ms});
+        inputs_[1].configure({config.pin_2, config.active_low, config.use_pullup, config.debounce_ms, config.hold_ms});
+        inputs_[2].configure({config.pin_3, config.active_low, config.use_pullup, config.debounce_ms, config.hold_ms});
+        inputs_[3].configure({config.pin_4, config.active_low, config.use_pullup, config.debounce_ms, config.hold_ms});
     }
 
     void begin() {
         for (uint8_t i = 0U; i < 4U; ++i) {
-            if (pins_[i] >= 0) {
-                pinMode(pins_[i], INPUT_PULLUP);
-            }
+            inputs_[i].begin();
         }
-        last_flags_ = readFlags();
     }
 
     const char* name() const { return "button_pin"; }
 
     ButtonUpdate poll() {
-        const uint8_t flags = readFlags();
-        const uint8_t pressMask = (uint8_t)((~last_flags_) & flags);
-        const bool changed = (flags != last_flags_);
-        last_flags_ = flags;
-        return {changed, flags, pressMask};
+        ButtonUpdate update = {};
+        resetDigitalInputMaskState(update.state);
+
+        for (uint8_t i = 0U; i < 4U; ++i) {
+            const uint8_t bit = static_cast<uint8_t>(1U << i);
+            const DigitalInputUpdate channelUpdate = inputs_[i].poll();
+            applyDigitalInputMaskUpdate(update.state, bit, channelUpdate);
+            update.duration_ms[i] = channelUpdate.active_ms;
+
+            if (channelUpdate.activated()) {
+                update.press_mask |= bit;
+            }
+            if (channelUpdate.deactivated()) {
+                update.release_mask |= bit;
+            }
+            if (channelUpdate.longHold()) {
+                update.long_press_mask |= bit;
+            }
+            if (channelUpdate.changed) {
+                update.changed = true;
+            }
+        }
+
+        return update;
     }
 
 private:
-    uint8_t readFlags() const {
-        uint8_t flags = 0U;
-        if (pins_[0] >= 0 && digitalRead(pins_[0]) == LOW) flags |= 0x01U;
-        if (pins_[1] >= 0 && digitalRead(pins_[1]) == LOW) flags |= 0x02U;
-        if (pins_[2] >= 0 && digitalRead(pins_[2]) == LOW) flags |= 0x04U;
-        if (pins_[3] >= 0 && digitalRead(pins_[3]) == LOW) flags |= 0x08U;
-        return flags;
-    }
-
-    int pins_[4] = {-1, -1, -1, -1};
-    uint8_t last_flags_ = 0U;
+    DigitalInputChannel inputs_[4];
 };
 
 template<>
@@ -193,7 +203,8 @@ public:
     const char* name() const { return "button_stub"; }
 
     ButtonUpdate poll() {
-        return {false, 0U, 0U};
+        ButtonUpdate update = {};
+        return update;
     }
 };
 

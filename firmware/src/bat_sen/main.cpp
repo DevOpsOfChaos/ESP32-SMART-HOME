@@ -123,13 +123,20 @@ struct NodeState {
 NodeState nodeStatus = {};
 
 const SmartHome::ShSensors::ReedProviderConfig REED_CONFIG = {
-    PIN_REED};
+    PIN_REED,
+    BAT_SEN_REED_SIGNAL_ACTIVE_LOW,
+    BAT_SEN_REED_SIGNAL_USE_PULLUP,
+    WINDOW_DEBOUNCE_MS};
 
 const SmartHome::ShSensors::ButtonProviderConfig BUTTON_CONFIG = {
     PIN_BUTTON_1,
     PIN_BUTTON_2,
     PIN_BUTTON_3,
-    PIN_BUTTON_4};
+    PIN_BUTTON_4,
+    BAT_SEN_BUTTON_SIGNAL_ACTIVE_LOW,
+    BAT_SEN_BUTTON_SIGNAL_USE_PULLUP,
+    INPUT_EVENT_DEBOUNCE_MS,
+    MULTI_BUTTON_LONGPRESS_MS};
 
 const SmartHome::ShSensors::RainProviderConfig RAIN_CONFIG = {
     PIN_RAIN_ADC,
@@ -389,7 +396,7 @@ bool sendeStateReport() {
         : nodeStatus.inputs.rain_raw;
     payload.button_flags = (BAT_SEN_BUTTON_PROVIDER_KIND == SH_BAT_SEN_BUTTON_PROVIDER_NONE)
         ? 0U
-        : nodeStatus.inputs.button_flags;
+        : nodeStatus.inputs.button_state.active_mask;
     payload.fault = nodeStatus.fault ? 1U : 0U;
     logBatterieMessung("state_report");
 
@@ -524,25 +531,25 @@ void messeBatterie() {
 void aktualisiereOptionaleEingaenge() {
     if (BAT_SEN_REED_PROVIDER_KIND != SH_BAT_SEN_REED_PROVIDER_NONE) {
         const SmartHome::ShSensors::ReedUpdate reedUpdate = reedProvider.poll();
-        if (nodeStatus.inputs.window_open != reedUpdate.window_open) {
-            nodeStatus.inputs.window_open = reedUpdate.window_open;
+        const bool previousWindowOpen = nodeStatus.inputs.window_open;
+        nodeStatus.inputs.window_open = reedUpdate.window_open;
+        if (previousWindowOpen != reedUpdate.window_open) {
             nodeStatus.state_report_offen = true;
+        }
+        if (reedUpdate.changed) {
             sendeEvent(
                 reedUpdate.window_open ? SH_EVENT_WINDOW_OPENED : SH_EVENT_WINDOW_CLOSED,
                 SH_TRIGGER_UNKNOWN,
                 0U,
                 0U);
-        } else if (reedUpdate.changed) {
-            nodeStatus.state_report_offen = true;
         }
     }
 
     if (BAT_SEN_BUTTON_PROVIDER_KIND != SH_BAT_SEN_BUTTON_PROVIDER_NONE) {
         const SmartHome::ShSensors::ButtonUpdate buttonUpdate = buttonProvider.poll();
-        if (nodeStatus.inputs.button_flags != buttonUpdate.button_flags) {
-            nodeStatus.inputs.button_flags = buttonUpdate.button_flags;
-            nodeStatus.state_report_offen = true;
-        } else if (buttonUpdate.changed) {
+        const uint8_t previousButtonMask = nodeStatus.inputs.button_state.active_mask;
+        nodeStatus.inputs.button_state = buttonUpdate.state;
+        if (previousButtonMask != buttonUpdate.state.active_mask) {
             nodeStatus.state_report_offen = true;
         }
 
@@ -550,6 +557,20 @@ void aktualisiereOptionaleEingaenge() {
             const uint8_t bit = (uint8_t)(1U << buttonIndex);
             if (buttonUpdate.press_mask & bit) {
                 sendeEvent(SH_EVENT_BUTTON_PRESS, SH_TRIGGER_MANUAL_BUTTON, (uint8_t)(buttonIndex + 1U), 0U);
+            }
+            if (buttonUpdate.long_press_mask & bit) {
+                sendeEvent(
+                    SH_EVENT_BUTTON_LONG_PRESS,
+                    SH_TRIGGER_MANUAL_BUTTON,
+                    (uint8_t)(buttonIndex + 1U),
+                    buttonUpdate.duration_ms[buttonIndex]);
+            }
+            if (buttonUpdate.release_mask & bit) {
+                sendeEvent(
+                    SH_EVENT_BUTTON_RELEASE,
+                    SH_TRIGGER_MANUAL_BUTTON,
+                    (uint8_t)(buttonIndex + 1U),
+                    buttonUpdate.duration_ms[buttonIndex]);
             }
         }
     }

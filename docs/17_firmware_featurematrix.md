@@ -32,7 +32,7 @@ Legende:
 
 | Feature | `net_sen` | `bat_sen` | `net_erl` | `net_zrl` | `master` | Repo-Stand |
 |---|---|---|---|---|---|---|
-| Mechanische Buttons bis 4, event-relevant | `N` | `P` | `O` | `O` | `N` | `bat_sen` bis 4 Kanaele compile/stub vorbereitet; lokale Relais-Taster als Zielregel dokumentiert; kein Hardwarebeleg |
+| Mechanische Buttons bis 4, event-relevant | `N` | `P` | `O` | `O` | `N` | `bat_sen` nutzt jetzt eine gemeinsame debouncte Input-Grundlage mit Press-/Release-/Long-Press-Scaffold; build-validiert, aber kein Hardwarebeleg |
 | Touch-Buttons bis 4, hohe Zuverlaessigkeit | `N` | `O` | `N` | `P` | `N` | nur architekturvorbereitet; kein Buildpfad und kein Realnachweis |
 | `BME280` / `BMP280` | `P` | `N` | `O` | `O` | `N` | `net_sen`-Stubpfade fuer `BMP280` und `BME280` compile-validiert; kein Hardwarebeleg |
 | `DHT22` | `P` | `N` | `O` | `O` | `N` | `net_sen` mit DHT22 auf `GPIO6` real hardware belegt; andere Familien nur architektonische Option |
@@ -43,7 +43,7 @@ Legende:
 | `HLK-LD2410C` Radar | `P` | `N` | `O` | `N` | `N` | gemeinsamer Presence-Provider compile-vorbereitet; OUT- und spaeterer UART-Zustand sind konzeptionell getrennt, aber kein UART-Parser und kein Hardwarebeleg |
 | `HLK-LD2410B` Radar als Alt/Test | `O` | `N` | `O` | `N` | `N` | gemeinsamer Presence-Provider compile-vorbereitet; Test-/Alternativvariante ohne behaupteten UART-Fix und ohne Hardwarebeleg |
 | Standard analoger Regensensor | `N` | `P` | `N` | `N` | `N` | `bat_sen`-Stubpfad compile-validiert; kein Hardwarebeleg |
-| Reed-Fenster-/Tuersignal | `N` | `P` | `N` | `N` | `N` | `bat_sen`-Stubpfad compile-validiert; kein Hardwarebeleg |
+| Reed-Fenster-/Tuersignal | `N` | `P` | `N` | `N` | `N` | `bat_sen` nutzt jetzt dieselbe gemeinsame debouncte Input-Grundlage fuer stabile Open/Close-Zustaende; build-validiert, aber kein Hardwarebeleg |
 | 17er NeoPixel-Ring | `N` | `N` | `O` | `N` | `N` | nur architekturvorbereitet; aktuell nur fuer spaeteres Kuechenlicht gedacht |
 | Zusatz-LEDs fuer Auf/Ab | `N` | `N` | `N` | `O` | `N` | nur architekturvorbereitet; aktuell nur fuer spaeteres Rolladenmodul gedacht |
 

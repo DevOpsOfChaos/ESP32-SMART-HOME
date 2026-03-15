@@ -199,6 +199,8 @@ const char* powerTypeText(uint8_t powerType) {
 const char* eventTypeText(uint8_t eventType) {
     switch (eventType) {
         case SH_EVENT_BUTTON_PRESS: return "button_press";
+        case SH_EVENT_BUTTON_RELEASE: return "button_release";
+        case SH_EVENT_BUTTON_LONG_PRESS: return "button_long_press";
         case SH_EVENT_MOTION_DETECTED: return "motion_detected";
         case SH_EVENT_WINDOW_OPENED: return "window_opened";
         case SH_EVENT_WINDOW_CLOSED: return "window_closed";
