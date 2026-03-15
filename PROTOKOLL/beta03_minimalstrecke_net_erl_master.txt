@@ -1,8 +1,7 @@
 Stand: beta03
 Datei: beta03_minimalstrecke_net_erl_master.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Ziel
 - Erste echte Vertikalstrecke des Systems nachweisen:
   `net_erl_01 -> master -> MQTT -> master -> net_erl_01`

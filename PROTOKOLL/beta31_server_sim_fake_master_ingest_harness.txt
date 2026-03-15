@@ -1,10 +1,9 @@
 Stand: beta31
 Datei: beta31_server_sim_fake_master_ingest_harness.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
-- `docs/SERVER_SIMULATION_PLAN.md` fordert einen kleinen, ehrlichen Test-only Serverlauf an der MQTT-Grenze.
+- Die interne Simulationsplanung fordert einen kleinen, ehrlichen Test-only Serverlauf an der MQTT-Grenze.
 - Der Auftrag war eng:
   - keine direkte Node-MQTT-Simulation
   - nur ein Fake-Master als Boundary
@@ -75,5 +74,5 @@ Autor: Codex
 
 7. Lehrerblick
 - Die Eigenleistung steckt in der engen, architekturtreuen Testloesung statt in einem grossen Simulationsneubau.
-- Als Referenz genutzt wurden nur der versionierte MQTT-Vertrag, die Serverdoku, `docs/SERVER_SIMULATION_PLAN.md` und der aktuelle Flow-Generator.
+- Als Referenz genutzt wurden nur der versionierte MQTT-Vertrag, die Serverdoku, die interne Simulationsplanung und der aktuelle Flow-Generator.
 - Der Stand ist fachlich nachvollziehbar, weil Scope, IDs, Ports, Grenzen und die fehlenden Hardwareaussagen explizit dokumentiert sind.

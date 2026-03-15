@@ -1,8 +1,7 @@
 Stand: beta13
 Datei: beta13_cmd_set_audit_sqlite_egress.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Im aktuellen Repo-Stand war der serverseitige `cmd/set`-Pfad fuer `net_erl_01` bereits versioniert und real als Bedienpfad nachgewiesen, aber der ausgehende Publish selbst landete noch nicht in SQLite.
 - Die Aufgabe war ausdruecklich eng: nur Auditierbarkeit der bereits existierenden ausgehenden `smarthome/node/<node_id>/cmd/set`-Publishes ergaenzen, ohne Topic-, Payload- oder Architekturwechsel.

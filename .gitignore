@@ -66,4 +66,10 @@ private/
 tmp/
 archive/
 
+# Lokale Arbeitsanweisungen bleiben lokal
+AGENTS.md
+docs/AGENTS.md
+firmware/AGENTS.md
+server/AGENTS.md
+
 worktrees/

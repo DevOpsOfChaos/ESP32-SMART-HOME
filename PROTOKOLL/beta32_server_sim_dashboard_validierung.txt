@@ -1,8 +1,7 @@
 Stand: beta32
 Datei: beta32_server_sim_dashboard_validierung.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Die Fake-Master-Simulation war schon als Ingest-/SQLite-/Influx-Nachweis vorhanden, aber im bestehenden Dashboard nicht sauber sichtbar.
 - Der Auftrag war eng:

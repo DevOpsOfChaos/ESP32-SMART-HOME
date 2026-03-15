@@ -1,8 +1,7 @@
 Stand: beta07
 Datei: beta07_basisgeraete_net_zrl_net_sen_bat_sen.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Die reale Minimalstrecke `net_erl_01 <-> master` war vorhanden, die drei
   weiteren Basisgeraete `net_zrl`, `net_sen` und `bat_sen` waren aber nur

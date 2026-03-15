@@ -1,8 +1,7 @@
 Stand: beta24
 Datei: beta24_net_sen_01_realnachweis_blockiert_sensorpfad_und_portlage.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer `net_sen_01` sollte ein realer Hardware- und Serverpfad-Nachweis im aktuellen Repo-Stand gefahren werden.
 - Die Regeln waren dabei eng und sinnvoll:
@@ -77,7 +76,7 @@ Autor: Codex
 6. Risiken / Trade-offs
 - Es gibt nach diesem Lauf weiterhin keinen realen Nachweis fuer `net_sen_01`.
 - Es wurde bewusst kein Flash auf `COM5` erzwungen und kein serieller Monitor auf `COM5` geoeffnet, weil das den bereits belegten `net_zrl_01`-Pfad ohne sinnvollen Zielgewinn gestoert haette.
-- Es wurde bewusst keine Doku in `docs/14_test_und_nachweisstand.md`, `docs/CURRENT_SPRINT.md` oder `docs/TASK_QUEUE.md` geaendert, weil kein neuer Realnachweis entstanden ist.
+- Es wurde bewusst keine oeffentliche Nachweis- oder Statusdoku geaendert, weil kein neuer Realnachweis entstanden ist.
 
 7. Teststatus
 - Ausgefuehrt:

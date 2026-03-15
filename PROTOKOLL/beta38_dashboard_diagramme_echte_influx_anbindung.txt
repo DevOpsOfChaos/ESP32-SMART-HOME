@@ -1,8 +1,7 @@
 Stand: beta38
 Datei: beta38_dashboard_diagramme_echte_influx_anbindung.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Die reale Dashboard-V1 hatte fuer Diagramme bereits die Seiten, Geraetedetail-Einbindung und Influx-Query-Steuerung.
 - Praktisch war der Pfad aber nicht ehrlich nutzbar:

@@ -1,8 +1,7 @@
 Stand: beta11
 Datei: beta11_realer_retest_master_net_erl_mqtt_minimalpfad.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Das vorhandene Runbook fuer `master` und `net_erl` sollte nicht laenger nur als Doku-Behauptung stehen, sondern real auf Hardware und mit laufendem MQTT-System durchgezogen werden.
 - Die lokale Docker-Lage war vorher vermuellt: mehrere alte Compose-Projekte, konkurrierende Container und kein sauber reproduzierbarer Brokerpfad.

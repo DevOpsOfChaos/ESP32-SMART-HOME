@@ -1,10 +1,9 @@
 Stand: beta02
 Datei: beta02_net_zrl_basis_korrigiert.txt
 Datum: 2026-03-10
-Autor: ChatGPT
-
+Autor: Projektdokumentation
 1. Anlass
-- Der von Claude gelieferte Stand v0.2.0 hatte eine saubere Idee
+- Der vorherige Stand v0.2.0 hatte eine saubere Idee
   mit `COVER_MODUS_AKTIV`, aber die eigentliche Schaltfunktion war
   trotzdem hart wie ein Rolladen implementiert.
 - Dadurch war NET-ZRL als allgemeine Zwei-Relais-Basis faktisch unbrauchbar
@@ -50,5 +49,5 @@ Autor: ChatGPT
 7. Lehrerblick (Eigenleistung vs. geklaut)
 - Die Korrektur ist fachlich gut begründbar, weil sie direkt aus der
   Architekturregel "Basisklasse vs. Sondergerät" folgt.
-- Das ist kein kosmetischer KI-Umbau, sondern eine saubere
+- Das ist keine kosmetische Umbenennung, sondern eine saubere
   Architektur-Nachschärfung.

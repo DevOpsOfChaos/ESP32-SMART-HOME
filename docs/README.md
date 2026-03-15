@@ -1,26 +1,22 @@
 # Docs-Index
 
 ## Rolle dieser Datei
-Zentraler Index fuer die Projektdoku. Diese Datei ordnet die Dokumente ein, ersetzt aber nicht das Projektgedaechtnis.
+Zentraler Index fuer die oeffentliche Projektdoku.
 
 ## Zuerst lesen
-1. `../AGENTS.md`
-2. `../README.md`
-3. `PROJECT_CONTEXT.md`
-4. `CURRENT_SPRINT.md`
-5. `TASK_QUEUE.md`
-6. `DECISIONS.md`
-7. `14_test_und_nachweisstand.md`, wenn Status oder Testaussagen relevant sind
+1. `../README.md`
+2. `00_projektueberblick.md`
+3. `01_architektur.md`
+4. `DECISIONS.md`
+5. `14_test_und_nachweisstand.md`, wenn Status oder Testaussagen relevant sind
 
-## Verbindliches Projektgedaechtnis
-- `PROJECT_CONTEXT.md`: stabiler Projektrahmen, Repo-Grenzen, Dokumentrollen
-- `CURRENT_SPRINT.md`: aktueller Fokus
-- `TASK_QUEUE.md`: naechste reale Arbeitspakete
+## Kerndoku
 - `DECISIONS.md`: dauerhafte Entscheidungen mit Grund
-
-## Fachdoku
 - `00_projektueberblick.md`: kurzer Projektabriss
 - `01_architektur.md`: Zielarchitektur und harte Grenzen
+- `14_test_und_nachweisstand.md`: belegter Ist-Stand; `simulation` bleibt dort explizit von `real hardware` getrennt
+
+## Fachdoku
 - `03_protokoll.md`: ESP-NOW-Protokoll und Paketregeln
 - `04_mqtt_topics.md`: MQTT-Vertrag
 - `05_hardware_geraete.md`: Basisgeraete und Verweis auf die aktuelle Sondermodul-Doku
@@ -32,7 +28,6 @@ Zentraler Index fuer die Projektdoku. Diese Datei ordnet die Dokumente ein, erse
 
 ## Test und Nachweis
 - `06_testplan.md`: Soll-Pruefplan, keine Ist-Aussagen
-- `14_test_und_nachweisstand.md`: belegter Ist-Stand; `simulation` bleibt dort explizit von `real hardware` getrennt
 - `14_minimalstrecke_net_erl_master.md`: technischer Ablauf und Detailblatt der Minimalstrecke, kein globales Nachweisdokument
 - `16_build_flash_bringup_master_net_erl.md`: kontrolliertes Runbook fuer Build, Portwahl, Flash und seriellen Bring-up von `master` und `net_erl`
 

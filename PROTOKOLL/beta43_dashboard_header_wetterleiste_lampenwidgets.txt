@@ -1,8 +1,7 @@
 Stand: beta43
 Datei: beta43_dashboard_header_wetterleiste_lampenwidgets.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der reale Dashboard-V1-Stand nach `12a43ea` war in der Uebersicht bereits lesbarer, aber der Top-Level-Eindruck blieb unruhig:
   - die aktive Seite stand doppelt als App-Bar-Titel und nochmals als grosser Inhaltskopf im Page-Body

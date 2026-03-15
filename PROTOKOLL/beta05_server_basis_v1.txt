@@ -1,8 +1,7 @@
 Stand: beta05
 Datei: beta05_server_basis_v1.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der Serverteil hatte nur einen unsauberen Vorzustand mit veralteter Compose-Ablage und versionierten lokalen Secret-Dateien.
 - Fuer die Serverseite fehlte eine reproduzierbare V1 mit klarer Speichertrennung, MQTT-Verarbeitung und Dashboard-Grundstruktur.

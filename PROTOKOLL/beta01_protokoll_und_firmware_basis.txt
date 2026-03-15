@@ -1,8 +1,7 @@
 Stand: beta01
 Datei: beta01_protokoll_und_firmware_basis.txt
 Datum: 2026-03-10
-Autor: Claude Sonnet (Neubasis-Aufbau im Auftrag)
-
+Autor: Projektdokumentation
 1. Anlass
 - beta00 hatte das Repo-Gerüst und die Dokumentation aufgebaut,
   aber keine substanziellen Protokoll- oder Firmware-Dateien.

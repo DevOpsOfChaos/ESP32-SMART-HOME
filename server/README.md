@@ -4,7 +4,7 @@
 Bereichs-README fuer `server/`. Diese Datei beschreibt nur die Serverbasis und ihren Startpfad.
 
 Nicht diese Datei:
-- offizielles Projektgedaechtnis: `../AGENTS.md`, `../docs/PROJECT_CONTEXT.md`, `../docs/CURRENT_SPRINT.md`, `../docs/TASK_QUEUE.md`, `../docs/DECISIONS.md`
+- Gesamtarchitektur und verbindliche Entscheidungen: `../docs/README.md`, `../docs/DECISIONS.md`
 - belegter Gesamtstatus: `../docs/14_test_und_nachweisstand.md`
 
 Diese V1 stellt das erste reproduzierbare Serverfundament bereit fuer:

@@ -13,4 +13,4 @@
 - Altbestand bewertet und auf Referenz reduziert
 - Git-/Datenschutzregeln fest verankert
 - Server-Basis ergänzt
-- Claude-/Codex-Arbeitsmodus dokumentiert
+- lokale Arbeitsregeln dokumentiert

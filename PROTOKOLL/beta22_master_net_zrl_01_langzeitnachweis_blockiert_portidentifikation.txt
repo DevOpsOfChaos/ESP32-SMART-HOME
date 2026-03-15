@@ -1,8 +1,7 @@
 Stand: beta22
 Datei: beta22_master_net_zrl_01_langzeitnachweis_blockiert_portidentifikation.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der offene Langzeitstabilitaets-Nachweis fuer den offiziellen Pilotpfad `master <-> net_zrl_01` sollte im aktuellen Repo-Stand real gefahren werden.
 - Der erste reale Befund war hart und unromantisch:

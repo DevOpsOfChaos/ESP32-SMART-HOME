@@ -1,8 +1,7 @@
 Stand: beta10
 Datei: beta10_master_mqtt_v1_topics_korrigiert.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der finale MQTT-Vertrag V1 fordert fuer den Master die Topics `smarthome/master/<master_id>/status` und `smarthome/master/<master_id>/event`.
 - Die reale Firmware publizierte zwar bereits den Status unter `smarthome/master/<master_id>/status`, bediente aber keinen eigenen Master-`event`-Kanal.

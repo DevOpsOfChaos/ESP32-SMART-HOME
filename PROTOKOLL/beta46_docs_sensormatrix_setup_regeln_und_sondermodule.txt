@@ -1,7 +1,7 @@
 Stand: beta46
 Datei: beta46_docs_sensormatrix_setup_regeln_und_sondermodule.txt
 Datum: 2026-03-15
-Autor: Codex
+Autor: Projektdokumentation
 Status: Strategie- und Doku-Stand nachgezogen; kein neuer Hardware-Nachweis
 
 1. Anlass
@@ -16,7 +16,7 @@ Status: Strategie- und Doku-Stand nachgezogen; kein neuer Hardware-Nachweis
   - Reifestufen bleiben explizit getrennt
   - Nodes bekommen einen einheitlichen Setup-/Provisionierungs-/Resetvertrag
   - Server-Autoritaet bleibt ueber lokaler Komfortlogik
-- `docs/CURRENT_SPRINT.md` und `docs/TASK_QUEUE.md` wurden auf die code-first-Strategie mit spaeteren groesseren Hardwarewellen nachgezogen.
+- Die oeffentliche Strategiedoku wurde auf die code-first-Strategie mit spaeteren groesseren Hardwarewellen nachgezogen.
 - `docs/02_codevorgabe.md` bekam ein Stil-Addendum:
   sichtbare Dateikoepe, klare Trenner, fruehe Config-/Pin-/Timing-Bloecke und begruendete Grenzwerte bleiben gewollt, aber ohne Rueckfall in Copy-Paste- und Sonderarchitektur-Chaos.
 - Neue fokussierte Docs wurden angelegt:
@@ -41,7 +41,7 @@ Status: Strategie- und Doku-Stand nachgezogen; kein neuer Hardware-Nachweis
 - Die neuen Docs erzeugen absichtlich keine neuen Realbelege.
 - Touch-Buttons, Radar, `SHT41`, `VEML7700`, tiefere Rolladenlogik und der Setup-Webpfad bleiben technisch offen.
 - `compile/stub vorbereitet` fuer `BMP280`/`BME280`, `ENS160`, `reed`, `button`, `rain` ist weiterhin nur Build-/Scaffold-Status.
-- Aeltere breite Architekturtexte im Repo sind nicht komplett umgeschrieben; der aktuelle verbindliche Detailstand lebt jetzt bewusst in den neuen fokussierten Docs und den Memory-Dateien.
+- Aeltere breite Architekturtexte im Repo sind nicht komplett umgeschrieben; der aktuelle verbindliche Detailstand lebt jetzt bewusst in den neuen fokussierten Docs und der technischen Fachdoku.
 
 6. Validation
 - `git diff --check`

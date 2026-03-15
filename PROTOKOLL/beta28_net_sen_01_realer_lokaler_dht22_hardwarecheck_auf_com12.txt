@@ -1,8 +1,7 @@
 Stand: beta28
 Datei: beta28_net_sen_01_realer_lokaler_dht22_hardwarecheck_auf_com12.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer `net_sen_01` sollte der echte lokale Hardwarecheck auf `COM12` im aktuellen Repo-Stand gefahren werden.
 - Der Scope war bewusst hart begrenzt:

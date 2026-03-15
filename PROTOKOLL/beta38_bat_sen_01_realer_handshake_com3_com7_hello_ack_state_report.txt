@@ -1,7 +1,7 @@
 Stand: beta38
 Datei: beta38_bat_sen_01_realer_handshake_com3_com7_hello_ack_state_report.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: realer lokaler Handshake-Nachweis fuer `bat_sen_01`, kein voller offizieller Server- oder Gesamtprojektnachweis
 
 1. Anlass

@@ -1,8 +1,7 @@
 Stand: beta30
 Datei: beta30_net_sen_01_offizieller_servernachweis_realer_dht22_gpio6_auf_com12.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Nach `beta29` war der lokale Echt-Hardwarepfad von `net_sen_01` auf `COM12` mit plausiblem DHT22 auf `GPIO6` belegt, aber der offizielle Servernachweis blieb offen.
 - Der Auftrag war eng:

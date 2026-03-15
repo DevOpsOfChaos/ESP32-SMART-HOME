@@ -1,8 +1,7 @@
 Stand: beta18
 Datei: beta18_offizieller_offline_timeout_nachweis_master_net_erl_01.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der Offline-Timeout fuer `master <-> net_erl_01` war im aktuellen Repo-Stand ausdruecklich noch offen.
 - Belegt waren bereits Bring-up, offizieller serverseitiger Rueckweg und ACK-/Retry fuer den `net_erl_01`-Pilotpfad. Es fehlte der reale Nachweis, dass der Master ausbleibende Lebenszeichen korrekt in einen sichtbaren Offline-Status ueberfuehrt.

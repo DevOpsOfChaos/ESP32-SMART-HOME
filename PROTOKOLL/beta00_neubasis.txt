@@ -1,10 +1,9 @@
 Stand: beta00
 Datei: beta00_neubasis.txt
-Autor: Manuel Ries / ChatGPT-Arbeitsvorbereitung
-
+Autor: Manuel Ries
 1. Anlass
 - Das Altprojekt ist als direkte Basis zu komplex, zu stark verkoppelt und nicht sauber veröffentlichbar.
-- Für GitHub, Techniker-Dokumentation und spätere Arbeit mit Claude/Codex wird eine saubere Neubasis benötigt.
+- Fuer GitHub, Techniker-Dokumentation und spaetere lokale Weiterarbeit wird eine saubere Neubasis benoetigt.
 
 2. Änderung
 - Neues öffentliches Repo-Gerüst aufgesetzt.
@@ -12,7 +11,7 @@ Autor: Manuel Ries / ChatGPT-Arbeitsvorbereitung
 - Altbestand in Referenz / Verwerfen zerlegt.
 - Server-Basis ergänzt.
 - Git- und Datenschutzregeln ergänzt.
-- Arbeitsmodus für Claude und Codex dokumentiert.
+- lokale Arbeitsregeln dokumentiert.
 
 3. Begründung
 - Ohne harte Trennung würde das Altchaos erneut in die neue Basis einsickern.

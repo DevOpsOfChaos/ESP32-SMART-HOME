@@ -1,7 +1,7 @@
 Stand: beta44
 Datei: beta44_docs_hardware_readmes_und_bat_sen_profilstatus.txt
 Datum: 2026-03-15
-Autor: Codex
+Autor: Projektdokumentation
 Status: Doku-Harmonisierung; keine neuen Hardware- oder Servernachweise
 
 1. Anlass
@@ -18,8 +18,6 @@ Status: Doku-Harmonisierung; keine neuen Hardware- oder Servernachweise
   - `hardware/net_sen/README.md`
   - `hardware/bat_sen/README.md`
   - `docs/DECISIONS.md`
-  - `docs/CURRENT_SPRINT.md`
-  - `docs/TASK_QUEUE.md`
   - `docs/14_test_und_nachweisstand.md`
   - `docs/README.md`
   - `docs/16_build_flash_bringup_master_net_erl.md`
@@ -51,7 +49,7 @@ Status: Doku-Harmonisierung; keine neuen Hardware- oder Servernachweise
 6. Teststatus
 - Ausgefuehrt:
   - Konsistenzpruefung der geaenderten Doku gegen `firmware/platformio.ini`, `PinConfig.h`, `AppConfig.h`, `docs/14_test_und_nachweisstand.md` und die referenzierten `PROTOKOLL`-Staende
-  - Repo-Check gemaess `AGENTS.md`
+  - Repo-Check gemaess lokaler Arbeitsanweisung
 - Nicht ausgefuehrt:
   - neue Firmware-Builds
   - neue Hardware- oder Serverlaeufe

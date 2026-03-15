@@ -1,7 +1,7 @@
 Stand: beta41
 Datei: beta41_bat_sen_langlauf.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: fokussierte Real-Langzeitvalidierung fuer `bat_sen_01` auf dem aktuellen Einzelpfad, kein Deep-Sleep- oder Mehrgeraetenachweis
 
 1. Anlass

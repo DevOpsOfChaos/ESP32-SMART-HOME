@@ -28,9 +28,9 @@ Entscheidung:
 Grund:
 Die Basisklasse muss wiederverwendbar bleiben. Sonderlogik in der Basis wuerde den Lampenmodus und andere Einsaetze unnoetig verkomplizieren.
 
-## D-005 Kleine Arbeitspakete fuer Codex statt Grossauftraege
+## D-005 Kleine Arbeitspakete statt Grossauftraege
 Entscheidung:
-Codex bekommt kleine, klar abgegrenzte Arbeitspakete statt breiter Sammelauftraege.
+Es werden kleine, klar abgegrenzte Arbeitspakete statt breiter Sammelauftraege bevorzugt.
 
 Grund:
 Kleine Pakete halten Architektur, Review und Protokollierung kontrollierbar. Grosse Pakete erzeugen Kontextverlust, halbfertige Umbauten und schlechte Rueckverfolgbarkeit.
@@ -105,12 +105,12 @@ Forecast-Ansichten und Szenen bekommen in V1 keine eigene UI-Stufe.
 Grund:
 Die erste UI-Stufe soll nur die notwendige Betriebsbasis zeigen und nicht wieder zu frueh in Komfortflaeche ausufern.
 
-## D-016 Projektgedaechtnis, Testplan, Nachweis und Historie bleiben getrennt
+## D-016 Oeffentliche Fachdoku, Testplan, Nachweis und Historie bleiben getrennt
 Entscheidung:
-Das offizielle Projektgedaechtnis fuer neue Chats lebt in `AGENTS.md`, `docs/PROJECT_CONTEXT.md`, `docs/CURRENT_SPRINT.md`, `docs/TASK_QUEUE.md` und `docs/DECISIONS.md`. `docs/README.md` dient nur als Index. `docs/06_testplan.md` beschreibt nur den Soll-Pruefplan, `docs/14_test_und_nachweisstand.md` nur den belegten Ist-Stand und `PROTOKOLL/` bleibt die historische Chronik einzelner Stande.
+`docs/README.md` bleibt nur der oeffentliche Index. `docs/06_testplan.md` beschreibt nur den Soll-Pruefplan, `docs/14_test_und_nachweisstand.md` nur den belegten Ist-Stand und `PROTOKOLL/` bleibt die historische Chronik einzelner Stande. Interne Sprint-, Task- oder Arbeitsgedaechtnis-Dateien gehoeren nicht in den oeffentlichen GitHub-Stand.
 
 Grund:
-Ohne diese Trennung verwischen Arbeitsauftrag, Architekturwissen, Testabsicht und echte Nachweise. Dann behauptet das Repo frueher oder spaeter Dinge, die es nicht belastbar belegen kann.
+Ohne diese Trennung verwischen interne Arbeitsplanung, oeffentliche Technikdoku, Testabsicht und echte Nachweise. Dann verraet das Repo unnoetig den Umsetzungsprozess und behauptet frueher oder spaeter Dinge, die es nicht belastbar belegen kann.
 
 ## D-017 bat_sen trennt Messpfad, Prozentinterpretation und Profilwahl
 Entscheidung:

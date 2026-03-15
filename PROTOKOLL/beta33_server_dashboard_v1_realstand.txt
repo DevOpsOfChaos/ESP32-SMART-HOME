@@ -1,8 +1,7 @@
 Stand: beta33
 Datei: beta33_server_dashboard_v1_realstand.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Das reale Server-/Dashboard-Stack hatte die MQTT-, SQLite- und Influx-Basis bereits, aber im UI fehlte fast alles, was fuer einen ehrlichen V1 noetig ist:
   - responsive Geraete-Uebersicht

@@ -1,8 +1,7 @@
 Stand: beta12
 Datei: beta12_offizieller_serverseitiger_rueckweg_nachweis_net_erl_01.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der offizielle serverseitige Rueckweg-Nachweis fuer `net_erl_01` war im Repo noch offen.
 - `beta11` belegt nur den MQTT-Minimalpfad mit lokalem Direktclient und zaehlt deshalb nicht als serverseitiger Bedienpfad.

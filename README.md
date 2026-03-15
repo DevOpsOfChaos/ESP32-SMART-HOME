@@ -71,24 +71,14 @@ Der produktive Serverpfad im Repo ist bewusst klein gehalten:
 
 Der Stack ist unter `server/` als Docker-Compose-Basis aufgebaut und fuer lokalen Betrieb sowie spaetere Uebernahme auf Raspberry Pi ausgelegt.
 
-## Rolle von `migration/` und `automation/night_pipeline/`
-
-Diese Bereiche sind Hilfsstruktur fuer kontrollierte Arbeit am Altbestand, nicht Teil des eigentlichen Produktpfads.
-
-- `migration/` haelt im Haupt-Branch vor allem Stage-Ordner und Status- bzw. Reportdateien fuer die Legacy-Auswertung.
-- `automation/night_pipeline/` enthaelt Runner, Prompts, Konfiguration und Logs fuer die gestufte Nacht-Pipeline.
-- inhaltlichere Stage-Ergebnisse liegen aktuell in den zugehoerigen `worktrees/night_*`.
-- Die Pipeline soll brauchbare Kleinteile aus Altmaterial sichtbar machen und filtern. Sie ersetzt weder die aktive Firmware noch den aktiven Server-Stack.
-
 ## Repo-Struktur
 
-- `docs/`: Architektur, MQTT-Vertrag, Pinstandard, Projektgedaechtnis und belegter Ist-Stand
+- `docs/`: Architektur, MQTT-Vertrag, Pinstandard, Setup-Regeln und belegter Ist-Stand
 - `PROTOKOLL/`: historische Beta-Staende und einzelne Nachweisdateien
 - `firmware/`: PlatformIO-Firmware fuer `master`, `net_erl`, `net_zrl`, `net_sen`, `bat_sen`
 - `server/`: Docker-Compose-Serverbasis mit Mosquitto, Node-RED, InfluxDB und SQLite
-- `migration/`: Status- und Reportspur der Legacy-Auswertung
-- `automation/night_pipeline/`: automatisierte Pipeline fuer gestufte Legacy-Auswertung
-- `worktrees/`: stage-spezifische Night-Pipeline-Arbeitsstaende
+- `hardware/`: geraetespezifische Hardware-Notizen
+- `tools/`: lokale Helfer fuer Diagnose, Parsing und Tests
 
 ## Naechste reale Luecke
 

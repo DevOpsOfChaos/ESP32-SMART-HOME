@@ -1,8 +1,7 @@
 Stand: beta14
 Datei: beta14_kombinierter_live_nachweis_offizieller_rueckweg_net_erl_01_aktueller_repo_stand.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der offizielle Rueckweg fuer `net_erl_01` sollte im aktuellen Repo-Stand nicht nur in Teilnachweisen, sondern in genau einem realen kombinierten Live-Lauf belegt werden:
   `Server/Node-RED -> MQTT cmd/set -> SQLite audit_log egress -> Master -> net_erl -> MQTT state -> SQLite state`.

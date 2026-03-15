@@ -1,8 +1,7 @@
 Stand: beta17
 Datei: beta17_net_erl_01_offizieller_ack_retry_nachweis.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer den offiziellen `net_erl_01`-Command-Pfad war bisher nur der Rueckweg bis `state` belastbar belegt. ACK und Retry waren im Protokoll zwar vorgesehen, im realen Lauf aber nicht nachgewiesen.
 - Die Aufgabe war eng: kein neues Geraet, keine neue Architektur, kein generischer Multi-Device-Baukasten. Es sollte nur der offizielle `net_erl_01`-Pfad ehrlich vervollstaendigt werden.

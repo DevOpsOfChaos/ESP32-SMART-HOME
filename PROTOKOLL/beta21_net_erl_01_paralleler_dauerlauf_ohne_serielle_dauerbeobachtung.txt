@@ -1,8 +1,7 @@
 Stand: beta21
 Datei: beta21_net_erl_01_paralleler_dauerlauf_ohne_serielle_dauerbeobachtung.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Nach den belegten Pilotpfaden fuer `net_erl_01` ging es hier bewusst nicht um neue Mechanismen, sondern um einen weiteren ruhigen Parallelbetrieb mit offizieller Server-Sicht.
 - `net_erl_01` sollte als bereits belegter Pilotnode ohne serielle Dauerbeobachtung weiterlaufen, waehrend der Rest des Systems lokal weiterbenutzbar bleibt.

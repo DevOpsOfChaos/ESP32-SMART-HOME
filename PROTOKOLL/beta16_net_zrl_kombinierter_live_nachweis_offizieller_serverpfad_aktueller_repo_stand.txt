@@ -1,8 +1,7 @@
 Stand: beta16
 Datei: beta16_net_zrl_kombinierter_live_nachweis_offizieller_serverpfad_aktueller_repo_stand.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der in `beta15` nur bis zum realen Bring-up gefuehrte `net_zrl`-Pfad sollte jetzt als offizieller kombinierter Live-Nachweis im aktuellen Repo-Stand zu Ende gebracht werden:
   `Server/Node-RED -> MQTT cmd/set -> SQLite audit_log egress -> Master -> net_zrl -> MQTT state -> SQLite state`.

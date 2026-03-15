@@ -1,7 +1,7 @@
 Stand: beta39
 Datei: beta39_bat_sen_01_realer_gpio4_teilerknotencheck_und_v1_reststand.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: realer lokaler Nachtrag fuer `bat_sen_01`; offizieller Server- und Langzeitnachweis bleiben offen
 
 1. Anlass

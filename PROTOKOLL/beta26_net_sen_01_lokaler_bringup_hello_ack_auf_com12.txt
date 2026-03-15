@@ -1,8 +1,7 @@
 Stand: beta26
 Datei: beta26_net_sen_01_lokaler_bringup_hello_ack_auf_com12.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer den lokalen `net_sen_01`-Pruefling auf `COM12` sollte geklaert werden, warum nach sauberem Flash kein beobachtbarer HELLO-/Online-Eintritt sichtbar war.
 - Der Auftrag war bewusst eng:

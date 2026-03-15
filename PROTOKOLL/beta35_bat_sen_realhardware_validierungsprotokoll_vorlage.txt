@@ -1,7 +1,7 @@
 Stand: beta35
 Datei: beta35_bat_sen_realhardware_validierungsprotokoll_vorlage.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: Vorlage fuer realen Hardwarelauf, bis zur Ausfuellung kein Nachweis
 
 1. Laufidentifikation

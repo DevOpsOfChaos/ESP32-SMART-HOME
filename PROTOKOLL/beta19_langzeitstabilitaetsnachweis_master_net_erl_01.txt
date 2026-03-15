@@ -1,8 +1,7 @@
 Stand: beta19
 Datei: beta19_langzeitstabilitaetsnachweis_master_net_erl_01.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer den bereits funktional belegten Pilotpfad `master <-> net_erl_01` fehlte im aktuellen Repo-Stand noch ein echter Langzeitstabilitaets-Nachweis.
 - Belegt waren bereits Bring-up, offizieller serverseitiger Rueckweg, ACK/Retry und Offline-Timeout. Offen war die belastbare Aussage, dass derselbe Pfad ueber laengere Laufzeit ohne Phantom-Offlines, ACK-Verluste oder semantisch schmutzige SQLite-Ablagen stabil bleibt.

@@ -1,8 +1,7 @@
 Stand: beta42
 Datei: beta42_dashboard_uebersicht_relaiszeit_cleanup.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der reale Dashboard-V1-Stand nach `c3a5765` war funktional, aber im Uebersichts-/Geraetekartenpfad weiter unnoetig unruhig:
   - Relaiskarten zeigten neben den Schaltflaechen weiterhin redundante Textreste wie `Relais 1: aus`, `Relais 2: aus` oder Sammeltexte wie `Alle Ausgaenge aus`

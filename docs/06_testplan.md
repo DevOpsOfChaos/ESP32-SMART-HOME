@@ -13,7 +13,7 @@ Die bestehende Basis soll schrittweise, reproduzierbar und ohne Schein-Nachweise
 - Repository-Struktur vollständig
 - keine privaten Dateien im öffentlichen Bereich
 - Beispielkonfigurationen vorhanden
-- Rollen von Projektgedaechtnis, Fachdoku, Testplan, Nachweis und PROTOKOLL klar
+- Rollen von Fachdoku, Testplan, Nachweis und PROTOKOLL klar
 
 ## Phase 2 – Firmware-Build pro Basisgeraet
 - `master`, `net_erl`, `net_zrl`, `net_sen`, `bat_sen` bauen

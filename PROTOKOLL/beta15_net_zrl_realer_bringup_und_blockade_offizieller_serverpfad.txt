@@ -1,8 +1,7 @@
 Stand: beta15
 Datei: beta15_net_zrl_realer_bringup_und_blockade_offizieller_serverpfad.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der naechste echte Nachweis nach dem engen `net_erl_01`-Pilotpfad sollte `net_zrl` als allgemeine Zwei-Relais-Basis durch dieselbe reale Kette bringen.
 - Die Aufgabe verlangte ausdruecklich den offiziellen Server-/Node-RED-Pfad statt eines lokalen MQTT-Direktclients.

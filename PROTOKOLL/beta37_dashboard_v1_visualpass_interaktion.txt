@@ -1,8 +1,7 @@
 Stand: beta37
 Datei: beta37_dashboard_v1_visualpass_interaktion.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der reale Dashboard-V1-Stand aus `beta33` und dem Konsistenz-Cleanup aus `beta34` war funktional, aber im Alltag noch zu technisch und zu unruhig:
   - die Startseite zeigte Geräte zwar korrekt, aber die Karten lasen sich noch wie verdichtete Statusblöcke

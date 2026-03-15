@@ -1,7 +1,7 @@
 Stand: beta36
 Datei: beta36_bat_sen_2v9_realer_profilvergleich_und_mastercheck_com3_com7.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: realer Teiltest, kein offizieller Gesamt-Nachweis fuer `bat_sen`
 
 1. Anlass

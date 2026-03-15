@@ -1,8 +1,7 @@
 Stand: beta29
 Datei: beta29_net_sen_01_realer_lokaler_dht22_retest_mit_plausiblen_echtwerten_auf_com12.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Nach `beta28` war fuer `net_sen_01` auf `COM12` weiter nur `HELLO_ACK` plus `DHT22 FEHLER`/`DHT22 HINWEIS` belegt.
 - Inzwischen wurde real ein neuer DHT22 verbaut; die Datenleitung blieb laut Aufgabenrahmen weiter auf `GPIO6`.

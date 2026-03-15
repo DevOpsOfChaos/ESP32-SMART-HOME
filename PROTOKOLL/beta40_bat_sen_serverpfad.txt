@@ -1,7 +1,7 @@
 Stand: beta40
 Datei: beta40_bat_sen_serverpfad.txt
 Datum: 2026-03-12
-Autor: Codex
+Autor: Projektdokumentation
 Status: offizieller Realnachweis fuer `bat_sen_01` auf dem Serverpfad, kein Deep-Sleep- oder Mehrgeraetenachweis
 
 1. Anlass

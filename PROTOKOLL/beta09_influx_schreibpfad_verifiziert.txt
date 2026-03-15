@@ -1,8 +1,7 @@
 Stand: beta09
 Datei: beta09_influx_schreibpfad_verifiziert.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der InfluxDB-Schreibpfad der bestehenden Serverbasis sollte mit kontrollierten MQTT-Testdaten belastbar nachgewiesen werden.
 - Ziel war kein Ausbau des Servers, sondern die Verifikation und nur bei echtem Defekt die minimale Korrektur der Ingest-Logik.

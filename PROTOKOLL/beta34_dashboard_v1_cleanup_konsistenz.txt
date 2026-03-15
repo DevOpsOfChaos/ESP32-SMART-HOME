@@ -1,8 +1,7 @@
 Stand: beta34
 Datei: beta34_dashboard_v1_cleanup_konsistenz.txt
 Datum: 2026-03-12
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Der reale Dashboard-V1-Stand aus `beta33` war funktional, aber in mehreren Punkten inkonsistent:
   - doppelte Navigation durch Seitenmenü plus Zusatzlinks in fast jeder Seite

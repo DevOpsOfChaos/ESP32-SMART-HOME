@@ -1,8 +1,7 @@
 Stand: beta25
 Datei: beta25_net_sen_01_dht22_gpio6_flashbar_aber_ohne_realen_hello.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer `net_sen_01` sollte im aktuellen Repo-Stand ein echter Minimalpfad mit genau einem DHT22 an `GPIO6` aufgebaut und nachgewiesen werden.
 - Der Test durfte `master` auf `COM3` nicht stoeren und sollte `net_zrl_01` nicht unnoetig anfassen.

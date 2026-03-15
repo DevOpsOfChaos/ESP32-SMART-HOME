@@ -62,4 +62,4 @@
 - Altbestand sauber in Referenz vs. Verwerfen zerlegt
 - Server-Struktur als neue, leere Basis ergänzt
 - PROTOKOLL-Ordner und Git-/Secrets-Regeln ergänzt
-- Arbeitsgrundlage für Claude und Codex vorbereitet
+- lokale Arbeitsgrundlagen vorbereitet

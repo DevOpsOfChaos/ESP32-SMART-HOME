@@ -1,8 +1,7 @@
 Stand: beta04
 Datei: beta04_hardware_pinstandard_und_pinfixes.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Feste Hardware-Pinregeln der aktuellen Platinen mussten verbindlich
   dokumentiert und in die bestehende Firmware uebernommen werden.

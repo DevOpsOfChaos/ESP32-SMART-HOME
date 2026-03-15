@@ -1,8 +1,7 @@
 Stand: beta10
 Datei: beta10_mqtt_broker_auth_haertung.txt
 Datum: 2026-03-10
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Die bestehende Serverbasis sollte den lokalen MQTT-Broker sauber haerten koennen, ohne Passwoerter oder lokale Zugangsdaten ins Repo zu ziehen.
 - Der Eingriff durfte nur Broker-/Compose-/Config-Haertung plus notwendige Doku betreffen.

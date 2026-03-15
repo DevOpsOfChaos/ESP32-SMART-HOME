@@ -1,8 +1,7 @@
 Stand: beta27
 Datei: beta27_net_sen_01_dht22_lokalpfad_robustheitsfix_ohne_servernachweis.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Nach `beta26` ist der lokale Bring-up von `net_sen_01` bis `HELLO_ACK` auf `COM12` belegt.
 - Der naechste Engpass liegt damit nicht im Serverpfad, sondern im lokalen DHT22-Hardwarepfad.
@@ -18,7 +17,6 @@ Autor: Codex
     - wiederkehrender Verdrahtungshinweis, ohne den Boot-/HELLO-Pfad zu blockieren
 - knappe Doku fuer den echten Hardwarecheck:
   - `hardware/net_sen/README.md`
-  - `docs/TASK_QUEUE.md` priorisiert jetzt zuerst den lokalen DHT22-Hardware-Nachweis und erst danach den offiziellen Servernachweis
 
 3. Begruendung
 - Die Adafruit-DHT-Library setzt ihren 5-Byte-Datenpuffer vor jedem Read auf `0` und akzeptiert ein Paket als erfolgreich, wenn die Pruefsumme passt.

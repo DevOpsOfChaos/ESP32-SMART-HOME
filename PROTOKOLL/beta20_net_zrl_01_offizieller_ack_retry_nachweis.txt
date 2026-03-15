@@ -1,8 +1,7 @@
 Stand: beta20
 Datei: beta20_net_zrl_01_offizieller_ack_retry_nachweis.txt
 Datum: 2026-03-11
-Autor: Codex
-
+Autor: Projektdokumentation
 1. Anlass
 - Fuer `net_zrl_01` war der offizielle kombinierte Live-Pfad seit `beta16` belegt, aber ACK/Retry fuer den offiziellen `cmd/set`-Pfad blieb offen.
 - Die Aufgabe blieb eng: keine neuen Geraetefeatures, keine Rolladen-Sonderlogik, keine Architektur- oder Topic-Aenderung. Es sollte nur der reale ACK-/Retry-Nachweis fuer den offiziellen `net_zrl_01`-Pfad sauber geschlossen werden.
