@@ -4,7 +4,7 @@
  Geraet    : NET-ZRL (Netzbetrieben, 2 Relais)
  Datei     : main.cpp
  Version   : 0.2.2
- Stand     : 2026-03-10
+ Stand     : 2026-03-15
 
  Funktion:
  Allgemeine Zwei-Relais-Basis in derselben ESP-NOW-Linie wie NET-ERL.
@@ -13,6 +13,8 @@
  - HEARTBEAT zyklisch
  - STATE_REPORT beim Start, periodisch und nach Relaisaenderung
  - COMMAND_SET_RELAY fuer Relais 1/2
+ - lokaler manueller Tasterpfad fuer Relais-/Cover-Bedienung
+ - Eventmeldungen fuer lokale und serverseitige Schaltgrunde
  - Cover-Schutzlogik nur bei aktivem COVER_MODUS_AKTIV
 ====================================================================
 */
@@ -38,6 +40,7 @@
 #include "../../include/DebugConfig.h"
 #include "../../lib/ShProtocol/src/Protocol.h"
 #include "../../lib/ShProtocol/src/DeviceTypes.h"
+#include "../../lib/ShSensors/src/DigitalInputSupport.h"
 #include <ShNodeProvisioning.h>
 
 constexpr bool DEBUG_LOKAL_AKTIV = DEVICE_DEBUG_AKTIV && DEBUG_AKTIV;
@@ -68,6 +71,12 @@ struct NodeState {
 };
 
 NodeState nodeStatus = {};
+SmartHome::ShSensors::DigitalInputChannel lokalerTaster1(
+    {PIN_BUTTON_1, true, true, INPUT_EVENT_DEBOUNCE_MS, LOCAL_BUTTON_LONGPRESS_MS});
+SmartHome::ShSensors::DigitalInputChannel lokalerTaster2(
+    {PIN_BUTTON_2, true, true, INPUT_EVENT_DEBOUNCE_MS, LOCAL_BUTTON_LONGPRESS_MS});
+SmartHome::ShSensors::DigitalInputChannel lokalerTaster3(
+    {PIN_BUTTON_3, true, true, INPUT_EVENT_DEBOUNCE_MS, LOCAL_BUTTON_LONGPRESS_MS});
 
 bool istBroadcastMac(const uint8_t* mac) {
     return mac != nullptr && memcmp(mac, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0;
@@ -243,6 +252,21 @@ bool sendeStateReport() {
     return false;
 }
 
+bool sendeEvent(uint8_t eventType, uint8_t trigger, uint8_t param1, uint16_t param2) {
+    if (!nodeStatus.master_mac_gueltig) {
+        return false;
+    }
+
+    SmartHome::EventReportPayload payload = {};
+    copyText(payload.node_id, sizeof(payload.node_id), DEVICE_ID);
+    payload.event_type = eventType;
+    payload.trigger = trigger;
+    payload.param1 = param1;
+    payload.param2 = param2;
+
+    return sendePaket(nodeStatus.master_mac, SH_MSG_EVENT, &payload, sizeof(payload), "EVENT");
+}
+
 bool istDoppeltesCmd(uint8_t seq, const SmartHome::CmdPayload& cmd) {
     return nodeStatus.letzter_cmd_gueltig &&
            nodeStatus.letzter_cmd_seq == seq &&
@@ -274,17 +298,59 @@ void aktualisiereCoverState() {
     }
 }
 
-void schalteRelaisGesichert(uint8_t relayIndex, bool einschalten, const char* quelle) {
-    if (relayIndex > 1U) return;
+bool manualAllowed(uint8_t buttonIndex) {
+    switch (buttonIndex) {
+        case 1U:
+            return PIN_BUTTON_1 >= 0;
+        case 2U:
+            return PIN_BUTTON_2 >= 0;
+        case 3U:
+            return PIN_BUTTON_3 >= 0;
+        default:
+            return false;
+    }
+}
+
+bool relayCommandAllowed(uint8_t relayIndex, uint8_t trigger) {
+    if (relayIndex > 1U) return false;
+
+    switch (trigger) {
+        case SH_TRIGGER_MASTER_CMD:
+            return true;
+        case SH_TRIGGER_MANUAL_BUTTON:
+            return manualAllowed((uint8_t)(relayIndex + 1U));
+        default:
+            return false;
+    }
+}
+
+uint8_t relayEventType(uint8_t trigger, uint8_t relayIndex, bool einschalten) {
+    if (COVER_MODUS_AKTIV) {
+        if (!einschalten) {
+            return SH_EVENT_COVER_STOP;
+        }
+        return relayIndex == 0U ? SH_EVENT_COVER_UP : SH_EVENT_COVER_DOWN;
+    }
+    (void)trigger;
+    return SH_EVENT_RELAY_CHANGED;
+}
+
+bool schalteRelaisGesichert(uint8_t relayIndex, bool einschalten, uint8_t trigger, const char* quelle) {
+    if (!relayCommandAllowed(relayIndex, trigger)) {
+        logf("WARN", "Relais %u blockiert: unzulaessiger Trigger %u (%s)", (unsigned)(relayIndex + 1U), (unsigned)trigger, quelle);
+        return false;
+    }
+
+    const bool warBereitsAn = (relayIndex == 0U) ? nodeStatus.relay_1 : nodeStatus.relay_2;
 
     if (COVER_MODUS_AKTIV && einschalten) {
         if ((relayIndex == 0U && nodeStatus.relay_2) || (relayIndex == 1U && nodeStatus.relay_1)) {
             logf("WARN", "Relais %u blockiert: Gegenrichtung aktiv (%s)", (unsigned)(relayIndex + 1U), quelle);
-            return;
+            return false;
         }
         if (nodeStatus.relais_verriegelt && millis() < nodeStatus.verriegelung_bis_ms) {
             logf("WARN", "Relais %u blockiert: Reversiersperrzeit aktiv", (unsigned)(relayIndex + 1U));
-            return;
+            return false;
         }
     }
 
@@ -298,10 +364,14 @@ void schalteRelaisGesichert(uint8_t relayIndex, bool einschalten, const char* qu
     aktualisiereCoverState();
     nodeStatus.state_report_offen = true;
     logf("INFO", "Relais %u -> %s (%s)", (unsigned)(relayIndex + 1U), einschalten ? "EIN" : "AUS", quelle);
+    if (warBereitsAn != einschalten) {
+        sendeEvent(relayEventType(trigger, relayIndex, einschalten), trigger, relayIndex, einschalten ? 1U : 0U);
+    }
+    return true;
 }
 
-void stoppeFahrt(const char* quelle) {
-    bool warAktiv = nodeStatus.relay_1 || nodeStatus.relay_2;
+bool stoppeFahrt(const char* quelle, uint8_t trigger) {
+    const bool warAktiv = nodeStatus.relay_1 || nodeStatus.relay_2;
 
     nodeStatus.relay_1 = false;
     nodeStatus.relay_2 = false;
@@ -316,6 +386,10 @@ void stoppeFahrt(const char* quelle) {
 
     nodeStatus.state_report_offen = true;
     logf("INFO", "Cover-Stopp (%s)", quelle);
+    if (warAktiv) {
+        sendeEvent(SH_EVENT_COVER_STOP, trigger, 0U, 0U);
+    }
+    return true;
 }
 
 void aktualisiereRelaisVerriegelung() {
@@ -350,6 +424,10 @@ void initialisiereHardware() {
     nodeStatus.cover_position = 0xFFU;
     nodeStatus.fault = false;
     nodeStatus.state_report_offen = false;
+
+    lokalerTaster1.begin();
+    lokalerTaster2.begin();
+    lokalerTaster3.begin();
 }
 
 void initialisiereFunk() {
@@ -406,6 +484,62 @@ void verarbeiteHelloAck(const uint8_t* senderMac, const SmartHome::HelloAckPaylo
     nodeStatus.state_report_offen = true;
 }
 
+void verarbeiteLokalenButtonEvent(
+    uint8_t buttonIndex,
+    const SmartHome::ShSensors::DigitalInputUpdate& update,
+    const char* pressLabel,
+    const char* stopLabel)
+{
+    if (!manualAllowed(buttonIndex)) {
+        return;
+    }
+
+    if (update.activated()) {
+        sendeEvent(SH_EVENT_BUTTON_PRESS, SH_TRIGGER_MANUAL_BUTTON, buttonIndex, 0U);
+
+        if (COVER_MODUS_AKTIV) {
+            if (buttonIndex == 1U) {
+                if (nodeStatus.relay_1 && !nodeStatus.relay_2) {
+                    stoppeFahrt(stopLabel, SH_TRIGGER_MANUAL_BUTTON);
+                } else {
+                    stoppeFahrt(stopLabel, SH_TRIGGER_MANUAL_BUTTON);
+                    schalteRelaisGesichert(0U, true, SH_TRIGGER_MANUAL_BUTTON, pressLabel);
+                }
+            } else if (buttonIndex == 2U) {
+                if (nodeStatus.relay_2 && !nodeStatus.relay_1) {
+                    stoppeFahrt(stopLabel, SH_TRIGGER_MANUAL_BUTTON);
+                } else {
+                    stoppeFahrt(stopLabel, SH_TRIGGER_MANUAL_BUTTON);
+                    schalteRelaisGesichert(1U, true, SH_TRIGGER_MANUAL_BUTTON, pressLabel);
+                }
+            } else if (buttonIndex == 3U) {
+                stoppeFahrt(stopLabel, SH_TRIGGER_MANUAL_BUTTON);
+            }
+        } else {
+            if (buttonIndex == 1U) {
+                schalteRelaisGesichert(0U, !nodeStatus.relay_1, SH_TRIGGER_MANUAL_BUTTON, pressLabel);
+            } else if (buttonIndex == 2U) {
+                schalteRelaisGesichert(1U, !nodeStatus.relay_2, SH_TRIGGER_MANUAL_BUTTON, pressLabel);
+            } else {
+                logf("INFO", "Taster 3 ohne Funktion im allgemeinen Zwei-Relais-Modus");
+            }
+        }
+    }
+
+    if (update.longHold()) {
+        sendeEvent(SH_EVENT_BUTTON_LONG_PRESS, SH_TRIGGER_MANUAL_BUTTON, buttonIndex, update.active_ms);
+    }
+    if (update.deactivated()) {
+        sendeEvent(SH_EVENT_BUTTON_RELEASE, SH_TRIGGER_MANUAL_BUTTON, buttonIndex, update.active_ms);
+    }
+}
+
+void verarbeiteLokaleTaster(unsigned long jetzt) {
+    verarbeiteLokalenButtonEvent(1U, lokalerTaster1.poll(jetzt), "Lokaler Taster 1", "Lokaler Stop/Reset 1");
+    verarbeiteLokalenButtonEvent(2U, lokalerTaster2.poll(jetzt), "Lokaler Taster 2", "Lokaler Stop/Reset 2");
+    verarbeiteLokalenButtonEvent(3U, lokalerTaster3.poll(jetzt), "Lokaler Stop-Taster", "Lokaler Stop-Taster");
+}
+
 bool verarbeiteRelayCmd(const SmartHome::CmdPayload& cmd) {
     if (cmd.param1 > 1U) {
         logf("WARN", "Relay-CMD ignoriert: relay_index=%u", (unsigned)cmd.param1);
@@ -416,8 +550,7 @@ bool verarbeiteRelayCmd(const SmartHome::CmdPayload& cmd) {
         ? (cmd.param1 == 0U ? !nodeStatus.relay_1 : !nodeStatus.relay_2)
         : (cmd.param2 == 1U);
 
-    schalteRelaisGesichert(cmd.param1, einschalten, "Master-Kommando");
-    return true;
+    return schalteRelaisGesichert(cmd.param1, einschalten, SH_TRIGGER_MASTER_CMD, "Master-Kommando");
 }
 
 bool verarbeiteCoverCmd(const SmartHome::CmdPayload& cmd) {
@@ -428,16 +561,13 @@ bool verarbeiteCoverCmd(const SmartHome::CmdPayload& cmd) {
 
     switch (cmd.param1) {
         case SH_COVER_STATE_STOPPED:
-            stoppeFahrt("Cover-Stop");
-            return true;
+            return stoppeFahrt("Cover-Stop", SH_TRIGGER_MASTER_CMD);
         case SH_COVER_STATE_MOVING_UP:
-            stoppeFahrt("Cover-Auf");
-            schalteRelaisGesichert(0U, true, "Cover-Auf");
-            return true;
+            stoppeFahrt("Cover-Auf", SH_TRIGGER_MASTER_CMD);
+            return schalteRelaisGesichert(0U, true, SH_TRIGGER_MASTER_CMD, "Cover-Auf");
         case SH_COVER_STATE_MOVING_DOWN:
-            stoppeFahrt("Cover-Ab");
-            schalteRelaisGesichert(1U, true, "Cover-Ab");
-            return true;
+            stoppeFahrt("Cover-Ab", SH_TRIGGER_MASTER_CMD);
+            return schalteRelaisGesichert(1U, true, SH_TRIGGER_MASTER_CMD, "Cover-Ab");
         default:
             logf("WARN", "Cover-CMD ignoriert: param1=%u", (unsigned)cmd.param1);
             return false;
@@ -606,6 +736,7 @@ void loop() {
     }
 
     unsigned long jetzt = millis();
+    verarbeiteLokaleTaster(jetzt);
 
     if (!nodeStatus.master_bekannt) {
         if ((jetzt - nodeStatus.letztes_hello_ms) >= HELLO_RETRY_INTERVAL_MS) {

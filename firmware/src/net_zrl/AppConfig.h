@@ -41,6 +41,15 @@ constexpr unsigned long FACTORY_RESET_HOLD_MS = 10000UL;
 constexpr bool RELAY_1_DEFAULT_ON_BOOT = false;
 constexpr bool RELAY_2_DEFAULT_ON_BOOT = false;
 
+// Entprellung fuer lokale Taster.
+// 35 ms reicht fuer mechanische Kontakte,
+// ohne den lokalen Bedienpfad weich oder unpraezise wirken zu lassen.
+constexpr unsigned long INPUT_EVENT_DEBOUNCE_MS = 35UL;
+
+// Long-Press-Schwelle fuer lokale Button-Events.
+// Wird aktuell nur fuer Eventmeldungen genutzt, nicht fuer Sonderaktionen.
+constexpr unsigned long LOCAL_BUTTON_LONGPRESS_MS = 800UL;
+
 // Sperrzeit nach Richtungswechsel (ms).
 // Nur im Rolladenmodus relevant.
 // Verhindert sofortige Richtungsumkehr zum Motorschutz.

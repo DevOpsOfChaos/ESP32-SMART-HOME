@@ -3,8 +3,8 @@
  Projekt   : SmartHome ESP32
  Gerät     : NET-ERL (Netzbetrieben, 1 Relais)
  Datei     : main.cpp
- Version   : 0.2.1
- Stand     : 2026-03-10
+ Version   : 0.2.2
+ Stand     : 2026-03-15
 
  Funktion:
  Erste lauffaehige Vertikalstrecke fuer genau einen Pilot-Node:
@@ -16,7 +16,9 @@
  - HEARTBEAT zyklisch
  - STATE_REPORT beim Start und nach Relaisaenderung
  - COMMAND_SET_RELAY vom Master
- - lokalen Relaisstatus und klare Debug-Ausgaben
+ - lokaler manueller Tasterpfad
+ - optionale lokale PIR-Automatik unter Servervorrang
+ - Relaisstatus- und Eventmeldungen mit Trigger-Trennung
 ====================================================================
 */
 
@@ -41,21 +43,25 @@
 #include "../../include/DebugConfig.h"
 #include "../../lib/ShProtocol/src/Protocol.h"
 #include "../../lib/ShProtocol/src/DeviceTypes.h"
+#include "../../lib/ShSensors/src/DigitalInputSupport.h"
 #include <ShNodeProvisioning.h>
 
 constexpr bool DEBUG_LOKAL_AKTIV = DEVICE_DEBUG_AKTIV && DEBUG_AKTIV;
 constexpr char DATEI_GERAET[] = "NET-ERL";
-constexpr char DATEI_VERSION[] = "0.2.1";
+constexpr char DATEI_VERSION[] = "0.2.2";
 const uint8_t BROADCAST_MAC[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 SmartHome::ShNodeBase::NodeProvisioning provisioning;
 
 struct NodeState {
     bool master_bekannt;
     bool master_mac_gueltig;
+    bool auto_blockiert_bis_idle;
+    bool relay_1_auto_aktiv;
     bool relay_1;
     bool fault;
     bool state_report_offen;
     bool letzter_cmd_gueltig;
+    unsigned long auto_off_faellig_ms;
     unsigned long letztes_hello_ms;
     unsigned long letzter_heartbeat_ms;
     uint8_t master_mac[6];
@@ -65,6 +71,10 @@ struct NodeState {
 };
 
 NodeState nodeStatus = {};
+SmartHome::ShSensors::DigitalInputChannel lokalerTaster(
+    {PIN_BUTTON_1, true, true, INPUT_EVENT_DEBOUNCE_MS, LOCAL_BUTTON_LONGPRESS_MS});
+SmartHome::ShSensors::DigitalInputChannel pirEingang(
+    {PIN_PIR, false, false, PIR_EVENT_DEBOUNCE_MS, 0UL});
 
 bool istBroadcastMac(const uint8_t* mac) {
     return mac != nullptr && memcmp(mac, BROADCAST_MAC, sizeof(BROADCAST_MAC)) == 0;
@@ -228,6 +238,21 @@ bool sendeStateReport() {
     return false;
 }
 
+bool sendeEvent(uint8_t eventType, uint8_t trigger, uint8_t param1, uint16_t param2) {
+    if (!nodeStatus.master_mac_gueltig) {
+        return false;
+    }
+
+    SmartHome::EventReportPayload payload = {};
+    copyText(payload.node_id, sizeof(payload.node_id), DEVICE_ID);
+    payload.event_type = eventType;
+    payload.trigger = trigger;
+    payload.param1 = param1;
+    payload.param2 = param2;
+
+    return sendePaket(nodeStatus.master_mac, SH_MSG_EVENT, &payload, sizeof(payload), "EVENT");
+}
+
 bool sendeAck(const uint8_t* zielMac, uint8_t ackSeq, uint8_t ackMsgType, uint8_t status) {
     SmartHome::AckPayload payload = {};
     payload.ack_seq = ackSeq;
@@ -242,22 +267,150 @@ bool istDoppeltesCmd(uint8_t seq, const SmartHome::CmdPayload& cmd) {
            memcmp(&nodeStatus.letzter_cmd_payload, &cmd, sizeof(cmd)) == 0;
 }
 
-void schalteRelais(bool einschalten, const char* quelle) {
-    bool geaendert = (nodeStatus.relay_1 != einschalten);
-    nodeStatus.relay_1 = einschalten;
+bool zeitpunktErreicht(unsigned long jetzt, unsigned long zielMs) {
+    return (long)(jetzt - zielMs) >= 0L;
+}
 
+bool manualAllowed() {
+    return PIN_BUTTON_1 >= 0;
+}
+
+bool autoAllowed() {
+    return PIN_PIR >= 0 && !nodeStatus.auto_blockiert_bis_idle;
+}
+
+bool relayCommandAllowed(uint8_t trigger) {
+    switch (trigger) {
+        case SH_TRIGGER_MASTER_CMD:
+            return true;
+        case SH_TRIGGER_MANUAL_BUTTON:
+            return manualAllowed();
+        case SH_TRIGGER_AUTO:
+        case SH_TRIGGER_AUTO_OFF_TIMER:
+            return autoAllowed();
+        default:
+            return false;
+    }
+}
+
+uint8_t relayEventType(uint8_t trigger, bool einschalten) {
+    if (trigger == SH_TRIGGER_AUTO || trigger == SH_TRIGGER_AUTO_OFF_TIMER) {
+        return einschalten ? SH_EVENT_LIGHT_AUTO_ON : SH_EVENT_LIGHT_AUTO_OFF;
+    }
+    return SH_EVENT_RELAY_CHANGED;
+}
+
+void setRelayOutput(bool einschalten) {
     if (PIN_RELAY_1 >= 0) {
         digitalWrite(PIN_RELAY_1, einschalten ? HIGH : LOW);
-        logf("INFO", "Relais physisch %s auf GPIO%d (%s)", einschalten ? "EIN" : "AUS", PIN_RELAY_1, quelle);
-    } else {
-        logf("INFO", "Relais logisch %s (%s, kein Pin gesetzt)", einschalten ? "EIN" : "AUS", quelle);
+    }
+}
+
+void markiereServerVorrang() {
+    nodeStatus.auto_blockiert_bis_idle = true;
+    nodeStatus.relay_1_auto_aktiv = false;
+    nodeStatus.auto_off_faellig_ms = 0UL;
+}
+
+void aktualisiereAutomatikFreigabe(bool pirAktiv) {
+    if (nodeStatus.auto_blockiert_bis_idle && !pirAktiv) {
+        nodeStatus.auto_blockiert_bis_idle = false;
+        logf("INFO", "Lokale Automatik wieder freigegeben: PIR idle");
+    }
+}
+
+bool schalteRelais(bool einschalten, uint8_t trigger, const char* quelle) {
+    if (!relayCommandAllowed(trigger)) {
+        logf("WARN", "Relaiskommando blockiert (%s, trigger=%u)", quelle, (unsigned)trigger);
+        return false;
+    }
+
+    const bool geaendert = (nodeStatus.relay_1 != einschalten);
+    nodeStatus.relay_1 = einschalten;
+    setRelayOutput(einschalten);
+
+    if (trigger == SH_TRIGGER_MASTER_CMD) {
+        markiereServerVorrang();
+    } else if (trigger == SH_TRIGGER_MANUAL_BUTTON) {
+        nodeStatus.auto_blockiert_bis_idle = false;
+        nodeStatus.relay_1_auto_aktiv = false;
+        nodeStatus.auto_off_faellig_ms = 0UL;
+    } else if (trigger == SH_TRIGGER_AUTO && einschalten) {
+        if (geaendert || nodeStatus.relay_1_auto_aktiv) {
+            nodeStatus.relay_1_auto_aktiv = true;
+            if (LOCAL_AUTO_OFF_DELAY_MS > 0UL) {
+                nodeStatus.auto_off_faellig_ms = millis() + LOCAL_AUTO_OFF_DELAY_MS;
+            }
+        }
+    } else if (trigger == SH_TRIGGER_AUTO_OFF_TIMER) {
+        nodeStatus.relay_1_auto_aktiv = false;
+        nodeStatus.auto_off_faellig_ms = 0UL;
     }
 
     if (!geaendert) {
         logf("INFO", "Relaiszustand war bereits %s", einschalten ? "EIN" : "AUS");
     }
 
+    if (PIN_RELAY_1 >= 0) {
+        logf("INFO", "Relais physisch %s auf GPIO%d (%s)", einschalten ? "EIN" : "AUS", PIN_RELAY_1, quelle);
+    } else {
+        logf("INFO", "Relais logisch %s (%s, kein Pin gesetzt)", einschalten ? "EIN" : "AUS", quelle);
+    }
+
+    if (geaendert) {
+        sendeEvent(relayEventType(trigger, einschalten), trigger, 0U, einschalten ? 1U : 0U);
+    }
+
     nodeStatus.state_report_offen = true;
+    return true;
+}
+
+void verarbeiteLokalenTaster(unsigned long jetzt) {
+    if (!manualAllowed()) {
+        return;
+    }
+
+    const SmartHome::ShSensors::DigitalInputUpdate update = lokalerTaster.poll(jetzt);
+    if (update.activated()) {
+        sendeEvent(SH_EVENT_BUTTON_PRESS, SH_TRIGGER_MANUAL_BUTTON, 1U, 0U);
+        schalteRelais(!nodeStatus.relay_1, SH_TRIGGER_MANUAL_BUTTON, "Lokaler Taster");
+    }
+    if (update.longHold()) {
+        sendeEvent(SH_EVENT_BUTTON_LONG_PRESS, SH_TRIGGER_MANUAL_BUTTON, 1U, update.active_ms);
+    }
+    if (update.deactivated()) {
+        sendeEvent(SH_EVENT_BUTTON_RELEASE, SH_TRIGGER_MANUAL_BUTTON, 1U, update.active_ms);
+    }
+}
+
+void aktualisiereLokaleAutomatik(unsigned long jetzt) {
+    if (PIN_PIR < 0) {
+        return;
+    }
+
+    const SmartHome::ShSensors::DigitalInputUpdate update = pirEingang.poll(jetzt);
+    aktualisiereAutomatikFreigabe(update.active);
+
+    if (update.activated()) {
+        sendeEvent(SH_EVENT_MOTION_DETECTED, SH_TRIGGER_AUTO, 0U, 0U);
+        if (!autoAllowed()) {
+            logf("INFO", "PIR erkannt, aber lokale Automatik bleibt wegen Servervorrang geparkt");
+            return;
+        }
+
+        schalteRelais(true, SH_TRIGGER_AUTO, "Lokale PIR-Automatik");
+    }
+
+    if (update.active && nodeStatus.relay_1_auto_aktiv && LOCAL_AUTO_OFF_DELAY_MS > 0UL) {
+        nodeStatus.auto_off_faellig_ms = jetzt + LOCAL_AUTO_OFF_DELAY_MS;
+    }
+
+    if (!update.active &&
+        nodeStatus.relay_1_auto_aktiv &&
+        nodeStatus.auto_off_faellig_ms != 0UL &&
+        zeitpunktErreicht(jetzt, nodeStatus.auto_off_faellig_ms)) {
+        schalteRelais(false, SH_TRIGGER_AUTO_OFF_TIMER, "Lokaler Auto-Off");
+    }
 }
 
 void initialisiereHardware() {
@@ -272,8 +425,14 @@ void initialisiereHardware() {
     }
 
     nodeStatus.relay_1 = RELAY_DEFAULT_ON_BOOT;
+    nodeStatus.auto_blockiert_bis_idle = false;
+    nodeStatus.relay_1_auto_aktiv = false;
+    nodeStatus.auto_off_faellig_ms = 0UL;
     nodeStatus.fault = false;
     nodeStatus.state_report_offen = false;
+
+    lokalerTaster.begin();
+    pirEingang.begin();
 }
 
 void initialisiereFunk() {
@@ -366,7 +525,7 @@ void verarbeiteCmd(const uint8_t* senderMac, const SmartHome::MsgHeader& header,
         "COMMAND_SET_RELAY empfangen: relay_1=%s%s",
         einschalten ? "true" : "false",
         (header.flags & SH_FLAG_RETRANSMIT) ? " (retry)" : "");
-    schalteRelais(einschalten, "Master-Kommando");
+    schalteRelais(einschalten, SH_TRIGGER_MASTER_CMD, "Master-Kommando");
 
     nodeStatus.letzter_cmd_gueltig = true;
     nodeStatus.letzter_cmd_seq = header.seq;
@@ -487,6 +646,8 @@ void loop() {
     }
 
     unsigned long jetzt = millis();
+    verarbeiteLokalenTaster(jetzt);
+    aktualisiereLokaleAutomatik(jetzt);
 
     if (!nodeStatus.master_bekannt) {
         if ((jetzt - nodeStatus.letztes_hello_ms) >= HELLO_RETRY_INTERVAL_MS) {

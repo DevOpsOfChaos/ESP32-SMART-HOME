@@ -51,5 +51,21 @@ constexpr unsigned long FACTORY_RESET_HOLD_MS = 10000UL;
 // Begründung: Im Normalbetrieb ist "aus" der sichere Startzustand.
 constexpr bool RELAY_DEFAULT_ON_BOOT = false;
 
+// Entprellung fuer lokalen Taster und PIR-Flanken.
+// 35-50 ms filtern Kontaktprellen und kurze Stoespitzen,
+// ohne die Bedienung merklich traege zu machen.
+constexpr unsigned long INPUT_EVENT_DEBOUNCE_MS = 35UL;
+constexpr unsigned long PIR_EVENT_DEBOUNCE_MS = 50UL;
+
+// Long-Press-Schwelle fuer lokale Diagnostik-/Eventmeldungen.
+// Der Wert liegt deutlich ueber normalem Tastprellen,
+// aber noch unter einer "Button festhalten"-Fehlbedienung.
+constexpr unsigned long LOCAL_BUTTON_LONGPRESS_MS = 800UL;
+
+// Nachlauf fuer lokale PIR-Automatik.
+// 30 s geben genug Komfort fuer Flur-/Lichtpfade,
+// ohne dass ein einmaliger Trigger das Licht unnoetig lange haelt.
+constexpr unsigned long LOCAL_AUTO_OFF_DELAY_MS = 30000UL;
+
 // Verzögerung der Hauptschleife.
 constexpr unsigned long LOOP_INTERVAL_MS = 10UL;
