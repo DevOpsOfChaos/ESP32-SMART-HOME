@@ -1,83 +1,83 @@
-# ESP32-C3 SuperMini Plus V2.0 — Plattform-Referenz
+# ESP32-C3 SuperMini Plus V2.0 - Platform Reference
 
-> Alle Geräte dieses Projekts verwenden das TENSTAR ESP32-C3 SuperMini Plus V2.0
+> All devices in this project use the TENSTAR ESP32-C3 SuperMini Plus V2.0.
 
-## Technische Daten
+## Technical data
 
-| Eigenschaft | Wert |
-|-------------|------|
-| Mikrocontroller | Espressif ESP32-C3 (RISC-V, 32-Bit) |
-| CPU-Takt | bis 160 MHz |
+| Property | Value |
+|---|---|
+| Microcontroller | Espressif ESP32-C3 (RISC-V, 32-bit) |
+| CPU clock | up to 160 MHz |
 | Flash | 4 MB |
 | SRAM | 400 KB |
-| WLAN | 802.11 b/g/n (2.4 GHz) |
+| Wi-Fi | 802.11 b/g/n (2.4 GHz) |
 | Bluetooth | BLE 5.0 |
 | USB | Native USB-CDC + JTAG |
-| ADC | 12 Bit, bis 6 Kanäle nutzbar |
-| PWM | auf nahezu allen GPIOs |
-| Betriebsspannung | 5 V (USB/VIN) |
-| Logikspannung | 3.3 V |
-| Onboard-LDO | ME6211 / XC6206 / AMS1117-Clone |
-| Max. Ausgangsstrom (3.3V) | ~500 mA |
+| ADC | 12-bit, up to 6 usable channels |
+| PWM | Available on almost all GPIOs |
+| Supply voltage | 5 V (USB / VIN) |
+| Logic voltage | 3.3 V |
+| Onboard LDO | ME6211 / XC6206 / AMS1117 clone |
+| Max. output current (3.3 V) | approx. 500 mA |
 
-## Stromaufnahme
+## Current draw
 
-| Modus | Strom |
-|-------|-------|
-| WiFi TX Peak | ~300 mA |
-| Idle (WiFi connected) | 70–80 mA |
-| Light Sleep | ~5 mA |
-| Deep Sleep (Chip only) | ~40 µA |
-| Deep Sleep (Board gesamt) | ~0.5–0.8 mA |
+| Mode | Current |
+|---|---|
+| Wi-Fi TX peak | approx. 300 mA |
+| Idle (Wi-Fi connected) | 70-80 mA |
+| Light sleep | approx. 5 mA |
+| Deep sleep (chip only) | approx. 40 uA |
+| Deep sleep (whole board) | approx. 0.5-0.8 mA |
 
-## Onboard-Peripherie
+## Onboard peripherals
 
-| Komponente | Pin/Detail |
-|-----------|------------|
-| Power-LED | Rot (fest verdrahtet) |
-| User-LED | Blau (GPIO8) |
-| RGB-LED | WS2812 (GPIO8) |
-| Reset-Taster | EN |
-| Boot-Taster | GPIO9 |
-| Antenne | PCB-Antenne + U.FL-Anschluss |
+| Component | Pin / detail |
+|---|---|
+| Power LED | Red (hard-wired) |
+| User LED | Blue (GPIO8) |
+| RGB LED | WS2812 (GPIO8) |
+| Reset button | EN |
+| Boot button | GPIO9 |
+| Antenna | PCB antenna + U.FL connector |
 
-> **Hinweis:** Blaue LED und RGB-LED teilen sich GPIO8. Beide können nicht gleichzeitig genutzt werden.
+> **Note:** The blue LED and the RGB LED share GPIO8. They cannot be used at the same time.
 
-## THT-Adapter (`ESP32-C3_SUPERMINI_TH`)
+## Through-hole adapter (`ESP32-C3_SUPERMINI_TH`)
 
-Für den Einsatz auf den Projekt-Platinen wird das SuperMini-Board auf eine **Through-Hole-Adapterplatine** gesteckt:
+For use on the project boards, the SuperMini board is mounted on a **through-hole adapter board**:
 
-- KiCAD-Symbol: `ESP32-C3_SUPERMINI_TH.kicad_sym`
+- KiCad symbol: `ESP32-C3_SUPERMINI_TH.kicad_sym`
 - Footprint: `MODULE_ESP32-C3_SUPERMINI_TH.kicad_mod`
-- 3D-Modell: `ESP32-C3_SUPERMINI_TH.step`
-- Ermöglicht einfaches Einstecken/Austauschen auf Stiftleisten (2× 10-Pin)
+- 3D model: `ESP32-C3_SUPERMINI_TH.step`
+- Makes the module easy to insert and replace on 2x10 pin headers
 
-## Verfügbare GPIOs auf dem Adapter
+## Available GPIOs on the adapter
 
-| Pin | Funktion | Analog | Besonderheit |
-|-----|----------|--------|-------------|
-| GPIO0 | I²C SDA / frei | ✓ | ADC1_CH0 |
-| GPIO1 | I²C SCL / frei | ✓ | ADC1_CH1 |
-| GPIO2 | frei | ✓ | ADC1_CH2 |
-| GPIO3 | frei | ✓ | ADC1_CH3 |
-| GPIO4 | frei | ✓ | ADC1_CH4 |
-| GPIO5 | frei | ✓ | ADC2_CH0 |
-| GPIO6 | frei | ✗ | — |
-| GPIO7 | frei | ✗ | — |
-| GPIO8 | frei (LED) | ✗ | Onboard WS2812 |
-| GPIO9 | BOOT-Taster | ✗ | Nicht als I/O nutzbar |
-| GPIO10 | frei | ✗ | — |
-| GPIO20 | RX / frei | ✗ | UART |
-| GPIO21 | TX / frei | ✗ | UART |
+| Pin | Function | Analog | Special note |
+|---|---|---|---|
+| GPIO0 | I2C SDA / free | yes | ADC1_CH0 |
+| GPIO1 | I2C SCL / free | yes | ADC1_CH1 |
+| GPIO2 | free | yes | ADC1_CH2 |
+| GPIO3 | free | yes | ADC1_CH3 |
+| GPIO4 | free | yes | ADC1_CH4 |
+| GPIO5 | free | yes | ADC2_CH0 |
+| GPIO6 | free | no | - |
+| GPIO7 | free | no | - |
+| GPIO8 | free (LED) | no | Onboard WS2812 |
+| GPIO9 | Boot button | no | Not usable as regular I/O |
+| GPIO10 | free | no | - |
+| GPIO20 | RX / free | no | UART |
+| GPIO21 | TX / free | no | UART |
 
-> **Strapping-Pins:** GPIO2, GPIO8, GPIO9 haben Boot-Verhalten. GPIO9 ist im Normalbetrieb nicht nutzbar.
+> **Strapping pins:** GPIO2, GPIO8, and GPIO9 affect boot behavior. GPIO9 is not usable during normal operation.
 
-## Schnittstellen
+## Interfaces
 
-- **UART:** 2× (RX/TX auf GPIO20/21)
-- **I²C:** 1× (SDA/SCL auf GPIO0/1)
-- **SPI:** Verfügbar auf GPIO4-7
-- **ADC:** 12-Bit, bis 6 Kanäle (GPIO0-5)
-- **PWM:** Auf nahezu allen GPIOs
-- **USB-CDC:** Native USB-Serial für Programmierung & Debug
-- **USB-JTAG:** On-Chip-Debugger
+- **UART:** 2x (RX/TX on GPIO20/21)
+- **I2C:** 1x (SDA/SCL on GPIO0/1)
+- **SPI:** Available on GPIO4-7
+- **ADC:** 12-bit, up to 6 channels (GPIO0-5)
+- **PWM:** On almost all GPIOs
+- **USB-CDC:** Native USB serial for programming and debug
+- **USB-JTAG:** On-chip debugger

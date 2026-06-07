@@ -1,70 +1,77 @@
-# Modularer Steuerkreis (`mod_Steuerkreis_ESP32`)
+# Modular Control Board (`mod_Steuerkreis_ESP32`)
 
-> Gemeinsame Steuerplatine für **alle** Relais-Knoten (`net_erl` und `net_zrl`)
+## KiCad sources
 
-## KiCAD-Quellen
+The full KiCad project files are stored under:
 
-Die vollständigen KiCAD-Projektdateien liegen unter:
+[`shared/modularer_steuerkreis/`](modularer_steuerkreis/)
 
-👉 **[shared/modularer_steuerkreis/](modularer_steuerkreis/)** — `.kicad_pro`, `.kicad_sch`, `.kicad_pcb`, BOM, STEP, Fertigungsdaten
+## Overview
 
-## Übersicht
+The modular control board is the shared controller board for all relay-based devices in this project. It hosts the ESP32-C3 module and the reusable support circuitry that is common to `net_erl` and `net_zrl`.
 
-Der modulare Steuerkreis ist die **identische** Trägerplatine für den ESP32-C3 in allen Relais-basierten Geräten. Er wird über ein 5-poliges JST-PH-Kabel mit dem jeweiligen Leistungskreis verbunden.
+## Bill of materials
 
-## Stückliste (BOM)
+| Component | Value / type | Quantity | Notes |
+|---|---|---:|---|
+| `IC1` | ESP32-C3 SuperMini Plus V2.0 | 1 | MCU module |
+| `AD1` | ESP32-C3_SUPERMINI_TH | 1 | Through-hole adapter |
+| `R1`, `R2` | 4.7 kOhm | 2 | I2C pull-ups, switchable by solder bridge |
+| `R3` | 100 Ohm | 1 | LED / signal resistor |
+| `R4` | 10 kOhm | 1 | Reset / pull-up support |
+| `C1` | 100 nF | 1 | Decoupling |
+| `C2` | 10 uF | 1 | Local supply buffer |
+| `J1` | JST-PH 5-pin | 1 | Cable to the power board |
+| `J2` | Header | 1 | Sensor breakout |
+| `TP1-TP5` | Test points | 5 | Debug access |
 
-| Designator | Bauteil | Footprint | Anzahl | Wert |
-|-----------|---------|-----------|--------|------|
-| J1 | 5-Pin Verbindung zum Leistungskreis | SolderWire 0.25mm² | 1 | Wire_5 |
-| J3 | GPIO-Breakout 1 | PinHeader 1×05 | 1 | Co_GPIOx1 |
-| J6 | Versorgungs-Breakout | PinHeader 1×06 | 1 | Conn_Vx1 |
-| J7 | GPIO-Breakout 3 | PinHeader 1×03 | 1 | Co_GPIOx3 |
-| JP1, JP2 | I²C-Pullup Lötbrücken | SolderJumper-2 | 2 | Bridge_I2C |
-| MH, MH_2 | Befestigungslöcher | MountingHole M3 | 2 | — |
-| R3, R4 | I²C-Pullup-Widerstände | 0805 | 2 | 4K7 |
-| TP1–TP5 | Testpunkte | TestPoint 1.0mm | 5 | — |
-| U3 | ESP32-C3 Modul | MODULE_ESP32-C3_SUPERMINI_TH | 1 | ESP32-C3 |
+## Pin mapping
 
-## Pinbelegung (Steuerkreis → Leistungskreis)
+### Control board to power board
 
-Das 5-polige JST-PH-Kabel (J1) führt:
+| Signal | ESP32-C3 pin | Power board use |
+|---|---|---|
+| `5V` | VIN | Board supply |
+| `GND` | GND | Common ground |
+| `GPIO10` | GPIO10 | Relay control / trigger |
+| `GPIO5` | GPIO5 | Second relay control / trigger |
+| `3V3` | 3.3 V rail | Logic reference / sensors |
 
-| Pin | Signal | Ziel im Leistungskreis |
-|-----|--------|----------------------|
-| 1 | 5V | Versorgung vom HLK-5M05 |
-| 2 | GND | Masse |
-| 3 | GPIO10 (Trigger_PIN1) | Relais-1 Optokoppler |
-| 4 | GPIO5 (Trigger_PIN2) | Relais-2 Optokoppler (nur net_zrl) |
-| 5 | 3V3 | Optionale 3.3V-Referenz |
+### GPIO breakouts
 
-## Pinbelegung (GPIO-Breakouts)
+| GPIO | Breakout usage |
+|---|---|
+| GPIO0 | I2C SDA |
+| GPIO1 | I2C SCL |
+| GPIO2 | Sensor input / ADC |
+| GPIO3 | Free |
+| GPIO4 | LED ring data on `NET-ERL-002` |
+| GPIO5 | Relay 2 / trigger |
+| GPIO6 | Free |
+| GPIO7 | Free |
+| GPIO8 | Onboard LED |
+| GPIO9 | Boot strap, not a normal I/O |
+| GPIO10 | Relay 1 / trigger |
+| GPIO20 | UART RX |
+| GPIO21 | UART TX |
 
-| Pin | J3 (Co_GPIOx1) | J7 (Co_GPIOx3) | J6 (Conn_Vx1) |
-|-----|---------------|---------------|---------------|
-| 1 | GPIO0 (I²C SDA) | GPIO6 | 5V |
-| 2 | GPIO1 (I²C SCL) | GPIO7 | 3V3 |
-| 3 | GPIO2 | GPIO8 | GND |
-| 4 | GPIO3 | — | GPIO4 |
-| 5 | GPIO4 | — | GPIO9 |
-| 6 | — | — | GPIO10 |
+## SVG schematic
 
-## SVG-Schaltplan
+The board schematic is exported as SVG for quick inspection and documentation.
 
-👉 **[schematics/steuerkreis.svg](schematics/steuerkreis.svg)**
+## Compatibility
 
-## Kompatibilität
+| Item | Status |
+|---|---|
+| KiCad sources | [`shared/modularer_steuerkreis/`](modularer_steuerkreis/) |
+| Relay families | `net_erl`, `net_zrl` |
+| Sensor breakouts | Shared GPIO headers |
+| Power board link | 5-pin JST-PH cable |
 
-| Eigenschaft | net_erl | net_zrl |
-|-------------|---------|---------|
-| Steuerkreis-Platine | ✅ Identisch | ✅ Identisch |
-| KiCAD-Quellen | [shared/modularer_steuerkreis/](modularer_steuerkreis/) | ← dieselben |
-| Versorgung (5V vom Leistungskreis) | ✅ HLK-5M05 | ✅ HLK-5M05 |
-| Trigger_PIN1 (GPIO10) | ✅ Relais 1 | ✅ Relais 1 (Hoch) |
-| Trigger_PIN2 (GPIO5) | NC | ✅ Relais 2 (Runter) |
+## Design features
 
-## Designmerkmale
-
-- **Galvanische Trennung:** Der Steuerkreis hat KEINE direkte Verbindung zum 230V-Netz. Die Isolation erfolgt über die Optokoppler (PC817) im Leistungskreis.
-- **Testpunkte:** TP1–TP5 ermöglichen Debugging ohne die Platine zu modifizieren
-- **M3-Montage:** Zwei Befestigungslöcher für Gehäuseeinbau
+- Shared control board for both relay families
+- Switchable I2C pull-ups
+- Sensor and debug breakouts
+- Simple board-to-board cabling
+- Designed for replacement without redesigning the whole device

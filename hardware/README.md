@@ -7,6 +7,10 @@ This folder contains the physical side of the project:
 - manufacturing exports
 - enclosure and 3D-print models
 
+## Start here
+
+- [Hardware overview](00_hardwareueberblick.md)
+
 ## Main areas
 
 - `shared/` holds reusable circuit blocks and reference components
