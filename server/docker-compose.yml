@@ -1,0 +1,199 @@
+# =============================================================================
+# SmartHome Server – Docker Compose (Phase 1)
+# =============================================================================
+# Startet drei Dienste in einem privaten Netzwerk:
+#   1. mosquitto  – MQTT-Broker (Gerätekommunikation)
+#   2. nodered    – Node-RED (MQTT-Ingest + Dashboard + HTTP-API + SQLite)
+#
+# Node-RED startet mit einem dynamisch generierten Settings-File, das
+# alle Lib-Module in den functionGlobalContext einbindet.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Mosquitto MQTT-Broker
+  # ---------------------------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./config/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  # ---------------------------------------------------------------------------
+  # Node-RED – Anwendungsserver
+  # ---------------------------------------------------------------------------
+  nodered:
+    image: nodered/node-red:3.1
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "${NODE_RED_PORT:-1880}:1880"
+    environment:
+      TZ: "${TZ:-Europe/Berlin}"
+      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
+      SQLITE_DB_PATH: "${SQLITE_DB_PATH:-/config/sqlite/smarthome_phase1.db}"
+    volumes:
+      - ./nodered:/data          # Node-RED-Daten (Flows, Settings, Libs)
+      - ./sqlite:/config/sqlite  # SQLite-Datenbank + Schema (gleich wie HA-Add-on)
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - |
+        # --------------------------------------------------------------------
+        # Schritt 1: npm-Abhängigkeiten installieren (nur bei Bedarf)
+        # --------------------------------------------------------------------
+        if [ ! -d /data/node_modules/node-red-node-sqlite ] || [ ! -d /data/node_modules/@flowfuse/node-red-dashboard ]; then
+          cd /data && npm install --no-audit --no-fund --unsafe-perm
+        fi
+
+        # --------------------------------------------------------------------
+        # Schritt 2: Datenbank-Schema anlegen + Migrationen ausführen
+        # --------------------------------------------------------------------
+        node <<'NODE'
+        const fs = require('fs');
+        const path = require('path');
+        const sqlite3 = require('/data/node_modules/sqlite3');
+        const dbPath = process.env.SQLITE_DB_PATH || '/config/sqlite/smarthome_phase1.db';
+        const schemaSql = fs.readFileSync('/config/sqlite/00_schema_phase1.sql', 'utf8');
+        const dir = '/data/flows/active';
+
+        // Hilfsfunktion: Ein einzelnes SQL-Statement ausführen (Promise)
+        function runSql(db, sql) {
+          return new Promise((resolve, reject) => {
+            db.run(sql, (error) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve();
+            });
+          });
+        }
+
+        // Hilfsfunktion: Mehrere Zeilen abfragen (Promise)
+        function queryAll(db, sql) {
+          return new Promise((resolve, reject) => {
+            db.all(sql, (error, rows) => {
+              if (error) {
+                reject(error);
+                return;
+              }
+              resolve(rows || []);
+            });
+          });
+        }
+
+        // Fügt eine Spalte hinzu, falls sie noch nicht existiert (idempotent)
+        async function ensureColumn(db, tableName, columnName, columnDefinition) {
+          const columns = await queryAll(db, "PRAGMA table_info(" + tableName + ")");
+          const hasColumn = columns.some((column) => column && column.name === columnName);
+          if (!hasColumn) {
+            await runSql(db, "ALTER TABLE " + tableName + " ADD COLUMN " + columnName + " " + columnDefinition);
+          }
+        }
+
+        // Führt alle Phase-1-Migrationen aus (nach dem Basis-Schema)
+        async function ensurePhase1Migrations(db) {
+          await ensureColumn(db, "devices", "dashboard_display_name", "TEXT");
+          await ensureColumn(db, "device_state_latest", "cover_direction", "TEXT");
+          await ensureColumn(db, "device_state_latest", "cover_calibrated", "INTEGER");
+          await ensureColumn(db, "device_state_latest", "button_flags", "INTEGER");
+          await ensureColumn(db, "device_state_latest", "last_ack_source", "TEXT");
+          await ensureColumn(db, "device_state_latest", "gas_ohm", "REAL");
+          await ensureColumn(db, "device_state_latest", "aqi", "REAL");
+          await ensureColumn(db, "device_state_latest", "tvoc_ppb", "REAL");
+          await ensureColumn(db, "device_state_latest", "eco2_ppm", "REAL");
+
+          // --- Migrationen Phase 1.1: Automatisierungen ---
+          // Die Tabellen automations und automation_conditions werden idempotent
+          // über IF NOT EXISTS im Schema angelegt – kein ALTER TABLE nötig.
+          // FOREIGN KEY-Unterstützung explizit aktivieren (SQLite-Standard: aus).
+          await runSql(db, "PRAGMA foreign_keys = ON");
+        }
+
+        // Schema-Gesamtablauf: CREATE TABLE + Migrationen
+        function ensureSchema() {
+          return new Promise((resolve, reject) => {
+            const db = new sqlite3.Database(dbPath, (openErr) => {
+              if (openErr) {
+                reject(openErr);
+                return;
+              }
+
+              db.exec(schemaSql, async (execErr) => {
+                if (execErr) {
+                  db.close(() => reject(execErr));
+                  return;
+                }
+
+                try {
+                  await ensurePhase1Migrations(db);
+                } catch (migrationErr) {
+                  db.close(() => reject(migrationErr));
+                  return;
+                }
+
+                db.close((closeErr) => {
+                  if (closeErr) {
+                    reject(closeErr);
+                    return;
+                  }
+
+                  resolve();
+                });
+              });
+            });
+          });
+        }
+
+        // --------------------------------------------------------------------
+        // Hauptablauf beim Start
+        // --------------------------------------------------------------------
+        (async () => {
+          // Datenbank initialisieren
+          await ensureSchema();
+
+          // Alle Flow-Dateien aus /data/flows/active/ zusammenführen
+          const files = fs.readdirSync(dir).filter((name) => name.endsWith('.json')).sort();
+          const merged = files.flatMap((name) => JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')));
+          fs.writeFileSync('/data/flows.json', JSON.stringify(merged, null, 2));
+
+          // Dynamisches Settings-File erzeugen, das alle Lib-Module einbindet.
+          // Basis ist /data/settings.js – ergänzt um Module, die ggf. in der
+          // Basis-Konfiguration noch nicht enthalten sind (Redundanz ist harmlos).
+          const lines = [
+            "const base = require('/data/settings.js');",
+            'module.exports = {',
+            '  ...base,',
+            '  functionGlobalContext: {',
+            '    ...(base.functionGlobalContext || {}),',
+            "    topicRouter: require('/data/lib/topic_router'),",
+            "    deviceStore: require('/data/lib/device_store'),",
+            "    topicHandlers: require('/data/lib/topic_handlers'),",
+            "    capabilityHelpers: require('/data/lib/capability_helpers'),",
+            "    timeHelpers: require('/data/lib/time_helpers'),",
+            "    commandMinimal: require('/data/lib/command_minimal'),",
+            "    coverAutomation: require('/data/lib/cover_automation'),",
+            "    dashboardV1: require('/data/lib/dashboard_v1'),",
+            "    automationStore: require('/data/lib/automation_store'),",
+            "    automationEngine: require('/data/lib/automation_engine')",
+            '  }',
+            '};',
+            ''
+          ];
+          fs.writeFileSync('/tmp/settings.generated.js', lines.join('\n'));
+        })().catch((error) => {
+          console.error(error);
+          process.exit(1);
+        });
+        NODE
+
+        # --------------------------------------------------------------------
+        # Schritt 3: Node-RED mit generiertem Settings-File starten
+        # --------------------------------------------------------------------
+        exec node $$NODE_OPTIONS /usr/src/node-red/node_modules/node-red/red.js --userDir /data --settings /tmp/settings.generated.js --flowFile /data/flows.json

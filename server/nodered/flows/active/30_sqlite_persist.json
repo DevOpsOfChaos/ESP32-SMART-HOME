@@ -1,0 +1,135 @@
+[
+  {
+    "id": "tab_30_sqlite",
+    "type": "tab",
+    "label": "30_sqlite_persist",
+    "disabled": false,
+    "info": "Führt die zentral vorbereiteten SQLite-Batches aus. Alle Handler liefern nur noch vorbereitete Batch-Statements – dieser Tab führt sie atomar gegen die Serverdatenbank aus. Fehler werden über catch+debug protokolliert und am Node als Status angezeigt."
+  },
+  {
+    "id": "comment_30_sqlite",
+    "type": "comment",
+    "z": "tab_30_sqlite",
+    "name": "Zentraler SQLite-Schreibpfad",
+    "info": "Eingehende Nachrichten enthalten fertige SQL-Batches in msg.sqlite_batch.\nDieser Tab ist der einzige Ort, der SQLite-Schreibzugriffe ausführt (Single Writer).\nDas verhindert Datei-Locking-Konflikte und erleichtert die Fehlersuche.\nFehler landen im Catch-Node und werden als Node-Status angezeigt.",
+    "x": 210,
+    "y": 60,
+    "wires": []
+  },
+  {
+    "id": "linkin_30_writes",
+    "type": "link in",
+    "z": "tab_30_sqlite",
+    "name": "sqlite writes",
+    "links": ["linkout_20_sqlite", "linkout_90_sqlite"],
+    "x": 110,
+    "y": 180,
+    "wires": [["func_30_batch_topic"]]
+  },
+  {
+    "id": "func_30_batch_topic",
+    "type": "function",
+    "z": "tab_30_sqlite",
+    "name": "Batch nach msg.topic übertragen",
+    "func":
+"// Zweck: msg.sqlite_batch in msg.topic übertragen, damit der SQLite-Node\n// das vorbereitete SQL-Statement im Batch-Modus ausführen kann.\n//\n// Warum dieser Zwischenschritt?\n// Die Handler-Functions schreiben ihren SQL-Block nach msg.sqlite_batch.\n// Der SQLite-Node im Batch-Modus liest aus msg.topic.\n// Dieser Node ist die Brücke zwischen beiden Konventionen.\n\nconst batch = typeof msg.sqlite_batch === \"string\" ? msg.sqlite_batch.trim() : \"\";\n\n// Leere Batches still verwerfen – passiert z. B. wenn ein Handler\n// nichts zu persistieren hat (kein DB-relevanter State-Wechsel).\nif (!batch) {\n    return null;\n}\n\nmsg.topic = batch;\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 350,
+    "y": 180,
+    "wires": [["sqlite_30_phase1"]]
+  },
+  {
+    "id": "sqlite_30_phase1",
+    "type": "sqlite",
+    "z": "tab_30_sqlite",
+    "mydb": "sqlitedb_30_phase1",
+    "sqlquery": "batch",
+    "sql": "",
+    "name": "Server SQLite batch",
+    "x": 620,
+    "y": 180,
+    "wires": [[]]
+  },
+  {
+    "id": "catch_30_sqlite",
+    "type": "catch",
+    "z": "tab_30_sqlite",
+    "name": "SQLite-Fehler",
+    "scope": ["sqlite_30_phase1", "func_30_batch_topic"],
+    "uncaught": false,
+    "x": 160,
+    "y": 280,
+    "wires": [["debug_30_sqlite"]]
+  },
+  {
+    "id": "debug_30_sqlite",
+    "type": "debug",
+    "z": "tab_30_sqlite",
+    "name": "SQLite-Fehler",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": true,
+    "complete": "error",
+    "targetType": "msg",
+    "statusVal": "error.message",
+    "statusType": "msg",
+    "x": 390,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "sqlitedb_30_phase1",
+    "type": "sqlitedb",
+    "db": "/config/sqlite/smarthome_phase1.db",
+    "mode": "RWC"
+  },
+  {
+    "id": "inject_01_schema_bootstrap",
+    "type": "inject",
+    "z": "tab_30_sqlite",
+    "name": "SQLite Schema-Bootstrap",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "0.5",
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 170,
+    "y": 360,
+    "wires": [
+      [
+        "func_01_schema_bootstrap"
+      ]
+    ]
+  },
+  {
+    "id": "func_01_schema_bootstrap",
+    "type": "function",
+    "z": "tab_30_sqlite",
+    "name": "Automation-Schema sicherstellen",
+    "func": "// Idempotenter Bootstrap fuer Automation-Tabellen.\n// Laeuft beim Start vor dem minuetlichen Runner.\nmsg.topic = \"PRAGMA foreign_keys = ON;\\n\\nCREATE TABLE IF NOT EXISTS automations (\\n    automation_id  TEXT PRIMARY KEY,\\n    name           TEXT NOT NULL,\\n    enabled        INTEGER NOT NULL DEFAULT 1,\\n    target_device_id TEXT NOT NULL,\\n    action_kind    TEXT NOT NULL,\\n    action_payload TEXT NOT NULL,\\n    created_at     TEXT NOT NULL,\\n    updated_at     TEXT NOT NULL,\\n    last_run_at    TEXT,\\n    last_result    TEXT\\n);\\n\\nCREATE TABLE IF NOT EXISTS automation_conditions (\\n    condition_id      TEXT PRIMARY KEY,\\n    automation_id     TEXT NOT NULL,\\n    condition_scope   TEXT NOT NULL,\\n    condition_kind    TEXT NOT NULL,\\n    source_device_id  TEXT,\\n    field_name        TEXT,\\n    operator          TEXT,\\n    expected_value    TEXT,\\n    weekdays          TEXT,\\n    time_start        TEXT,\\n    time_end          TEXT,\\n    created_at        TEXT NOT NULL,\\n    updated_at        TEXT NOT NULL,\\n    FOREIGN KEY (automation_id) REFERENCES automations(automation_id) ON DELETE CASCADE\\n);\";\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 430,
+    "y": 360,
+    "wires": [
+      [
+        "sqlite_30_phase1"
+      ]
+    ]
+  }
+]

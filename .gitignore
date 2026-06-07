@@ -1,0 +1,44 @@
+# Secrets
+firmware/include/Secrets.h
+server/.env
+.env
+*.env.local
+
+# Build / IDE
+firmware/.pio/
+firmware/compile_commands.json
+compile_commands.json
+firmware/.vscode/
+.vscode/
+.idea/
+
+# OS / temp
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+
+# KiCad runtime artifacts
+**/#auto_saved_files#
+**/_autosave-*.kicad_sch
+**/*.kicad_sch.lck
+
+# Python / caches
+__pycache__/
+*.pyc
+
+# Node-RED runtime artifacts
+server/nodered/.config*.json
+server/nodered/.config*.json.backup
+server/nodered/.npm/
+server/nodered/cover_automation.json
+server/nodered/flows.json
+server/nodered/node_modules/
+server/sqlite/*.db
+server/sqlite/*.db-journal
+
+# Local archives
+*.zip
+logs/
+firmware/src/basetypes/master_compat/config.h
+AGENTS.md

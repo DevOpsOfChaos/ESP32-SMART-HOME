@@ -1,0 +1,292 @@
+# =============================================================================
+# smarthome_contract_base.yaml
+# =============================================================================
+# Projekt:    Smarthome Technikerprojekt – alternative MQTT-Linie
+# Zweck:      MQTT-basierte Firmware fuer Smarthome-Geraete
+#             ohne ESP-NOW-Master und ohne Bridge.
+# Lizenz:     Proprietär – nur für Projektzwecke
+# Pfad:       packages/smarthome_contract_base.yaml
+#
+# Datei-Funktion:
+#   Basis-Contract für alle Geraete. Stellt Meta-Daten,
+#   Verfuegbarkeits-Status und Fehlerbehandlung bereit.
+#   Wird von jedem Device-Code über !include eingebunden.
+#   Enthaelt keine geraetespezifische Logik.
+#
+# MQTT-Topics dieses Contracts:
+#   smarthome/device/{device_id}/meta         – Geraete-Metadaten (retain)
+#   smarthome/device/{device_id}/availability – Online/Offline-Status (retain)
+#
+# Autor:           DevOpsOfChaos
+# Erstelldatum:    2026-05-14
+# Letzte Änderung: 2026-05-14
+#
+# Aenderungshistorie:
+#   [2026-05-14] DevOpsOfChaos – Initiale Erstellung
+#   [2026-05-27] api: und debug: entfernt - api::setup() ruft
+#     LightState::get_output() vor Output-Init auf ESP32-C3/2026.5.1
+#     -> Load access fault. Workaround: Bloecke entfernt (HA-Version hatte sie nie).
+#
+# Abhaengigkeiten:
+#   Wird importiert von: Device-Dateien
+#   C++-Includes liegen bewusst in den konkreten Device-YAMLs, weil ESPHome
+#   Include-Pfade relativ zur konsumierenden YAML-Datei aufloest.
+# =============================================================================
+
+# =============================================================================
+# SUBSTITUTIONS – Geraetekonfiguration (wird pro Device ueberschrieben)
+# =============================================================================
+substitutions:
+  device_id: device_template               # Eindeutige MQTT-Geraete-ID (z.B. NET-ERL-010)
+  device_name: Smarthome Template Device   # Anzeigename für Home Assistant / MQTT
+  device_class: net_erl                    # Geraeteklasse: net_erl=Relais, net_sen=Sensor, net_zrl=Cover, bat_sen=Batterie
+  power_type: mains                        # Stromversorgung: mains (Netz) oder battery (Batterie)
+  fw_version: "0"                         # Firmware-Version für Meta-Report
+  caps: "0"                               # Faehigkeiten als Bitmaske: RELAY=1, RELAY2=2, TEMP=4, HUM=8, LUX=16, AQI=32, MOTION=64, WINDOW=128, RAIN=256, BATTERY=512, BUTTON=1024, MULTIBUTTON=2048, LED_RING=4096, COVER=8192, PRESSURE=32768
+  mac_address: ""                         # MAC-Adresse, falls sie explizit gesetzt wird
+  master_mac: ""                          # Gespeicherte Master-MAC fuer einheitliche Geraeteeinstellungen
+  meta_schema_version: "1"                # Version des Meta-Daten-Schemas
+  control_mode: none                      # Steuerungsmodus: none, relay_light, cover, …
+  config_profile: none                    # Konfigurationsprofil
+  reporting_mode: hybrid                  # Report-Modus: hybrid (Netzgeraete), sleep_event (Batterie)
+  sensor_mask: XXXXXXXXXX                 # 10-stellige Sensormaske: T(emp)peratur, H(um)Feuchte, P(ressure)Druck, G(as), L(ux)Licht, W(indow)Fensterkontakt, R(ain)Regen
+  input_mask: XXXXX                       # 5-stellige Eingangsmaske (Reserve)
+  setup_ap_password: smarthome            # lokales Setup-AP-Passwort, mindestens 8 Zeichen
+  setup_status_field_name: "status_interval"     # Anzeigename fuer Status-Intervall im Setup-Portal
+  setup_sensor_field_name: "sensor_interval"     # Anzeigename fuer Sensor-Intervall im Setup-Portal
+  setup_status_default: "60"
+  setup_sensor_default: "60"
+  setup_status_min: "5"
+  setup_status_max: "65535"
+  setup_sensor_min: "5"
+  setup_sensor_max: "65535"
+
+# =============================================================================
+# SETUP-PORTAL – Lokale AP-/Webserver-Schicht fuer Geraeteeinstellungen
+# =============================================================================
+web_server:
+  port: 81
+  version: 3
+  local: true
+  include_internal: true
+  ota: false
+
+captive_portal:
+
+# =============================================================================
+# API - Native ESPHome-API bewusst deaktiviert
+# =============================================================================
+# Diese Firmwarelinie nutzt MQTT + OTA. Kein api:-Block, damit die MQTT-only
+# Architektur konsistent bleibt und der fruehere ESP32-C3/API-Crashpfad nicht
+# erneut aktiviert wird.
+
+# =============================================================================
+# OTA
+# =============================================================================
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# =============================================================================
+# GLOBALE VARIABLEN – Contract-uebergreifende Zustaende
+# =============================================================================
+globals:
+  - id: contract_online                   # true = Geraet ist mit MQTT-Broker verbunden
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: contract_fault                    # true = es liegt ein Fehler vor (z.B. unbekannter Befehl, fehlende request_id)
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: contract_last_status_code         # Letzter Statuscode (0=ok, negative Werte=Fehler)
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: contract_last_status_text         # Letzter Statustext (z.B. "ok", "unsupported", "missing_request_id")
+    type: std::string
+    restore_value: no
+    initial_value: '"ok"'
+  - id: contract_last_request_id          # request_id des zuletzt verarbeiteten Kommandos
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: stored_master_mac                 # Persistente Master-MAC aus set_config
+    type: std::string
+    restore_value: yes
+    max_restore_data_length: 17
+    initial_value: '"${master_mac}"'
+  - id: setup_portal_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+# =============================================================================
+# SKRIPTE – Hilfsfunktionen für diesen Contract
+# =============================================================================
+script:
+  # clear_contract_fault – Setzt den Fehlerstatus zurueck
+  #   Setzt contract_fault=false, status_code=0, status_text="ok"
+  #   Parameter: keine  |  Rückgabe: keine
+  - id: clear_contract_fault
+    then:
+      - lambda: |-
+          id(contract_fault) = false;
+          id(contract_last_status_code) = 0;
+          id(contract_last_status_text) = "ok";
+
+  # publish_contract_meta – Veroeffentlicht Geraete-Metadaten via MQTT (retain)
+  #   Topic:   smarthome/device/{device_id}/meta
+  #   Payload: JSON mit device_id, device_name, device_class, power_type,
+  #            fw_version, caps, meta_schema_version, control_mode,
+  #            config_profile, reporting_mode, sensor_mask, input_mask
+  #   Parameter: keine  |  Rückgabe: keine
+  - id: publish_contract_meta
+    then:
+      - mqtt.publish_json:
+          topic: smarthome/device/${device_id}/meta
+          retain: true
+          payload: |-
+            root["device_id"] = "${device_id}";
+            root["device_name"] = "${device_name}";
+            root["device_class"] = "${device_class}";
+            root["power_type"] = "${power_type}";
+            // fw_version: als Integer wenn rein numerisch ("1"→1), sonst String ("1.0"→"1.0").
+            const char *fw_version_text = "${fw_version}";
+            bool fw_version_is_numeric = fw_version_text[0] != '\0';
+            for (const char *p = fw_version_text; *p != '\0'; p++) {
+              if (*p < '0' || *p > '9') {
+                fw_version_is_numeric = false;
+                break;
+              }
+            }
+            if (fw_version_is_numeric) root["fw_version"] = atoi(fw_version_text);
+            else root["fw_version"] = fw_version_text;
+            root["caps"] = atoi("${caps}");
+            root["mac_address"] = "${mac_address}";
+            root["meta_schema_version"] = atoi("${meta_schema_version}");
+            root["control_mode"] = "${control_mode}";
+            root["config_profile"] = "${config_profile}";
+            root["reporting_mode"] = "${reporting_mode}";
+            root["sensor_mask"] = "${sensor_mask}";
+            root["input_mask"] = "${input_mask}";
+
+  # publish_contract_availability – Veroeffentlicht Online/Offline-Status via MQTT (retain)
+  #   Topic:   smarthome/device/{device_id}/availability
+  #   Payload: JSON mit device_id, availability("online"/"offline"), online(bool), power_type
+  #   Parameter: keine  |  Rückgabe: keine
+  - id: publish_contract_availability
+    then:
+      - mqtt.publish_json:
+          topic: smarthome/device/${device_id}/availability
+          retain: true
+          payload: |-
+            root["device_id"] = "${device_id}";
+            root["availability"] = id(contract_online) ? "online" : "offline";
+            // online als JSON-boolean (true/false). Firmware-Master emittiert "true"/"false" (String).
+            // Beide Formen sind gueltiges JSON; Server muss beide akzeptieren.
+            root["online"] = id(contract_online);
+            root["power_type"] = "${power_type}";
+
+  - id: enter_setup_portal
+    then:
+      - lambda: |-
+          SmartHomeSetupPortal::CommonConfig config;
+          config.title = "${device_name} Setup";
+          config.intro = "Geraet lokal konfigurieren.";
+          config.status_label = "${setup_status_field_name}";
+          config.sensor_label = "${setup_sensor_field_name}";
+          config.status_min = atoi("${setup_status_min}");
+          config.status_max = atoi("${setup_status_max}");
+          config.sensor_min = atoi("${setup_sensor_min}");
+          config.sensor_max = atoi("${setup_sensor_max}");
+          SmartHomeSetupPortal::configure_common(
+            config,
+            []() -> std::string {
+              return id(stored_master_mac);
+            },
+            [](const std::string &value, std::string &error) -> bool {
+              if (!SmartHomeSetupPortal::validate_master_mac(value)) {
+                error = "master_mac ist ungueltig.";
+                return false;
+              }
+              id(stored_master_mac) = value;
+              auto call = id(setup_master_mac_text).make_call();
+              call.set_value(value);
+              call.perform();
+              return true;
+            },
+            []() -> int {
+              return (int) id(setup_status_interval_number).state;
+            },
+            [](int value) {
+              auto call = id(setup_status_interval_number).make_call();
+              call.set_value(value);
+              call.perform();
+            },
+            []() -> int {
+              return (int) id(setup_sensor_interval_number).state;
+            },
+            [](int value) {
+              auto call = id(setup_sensor_interval_number).make_call();
+              call.set_value(value);
+              call.perform();
+            });
+          id(setup_portal_active) = SmartHomeSetupPortal::start("${node_name}-setup", "${setup_ap_password}");
+
+text:
+  - platform: template
+    id: setup_master_mac_text
+    name: "${device_name} Master MAC"
+    mode: text
+    min_length: 0
+    max_length: 17
+    optimistic: true
+    restore_value: true
+    initial_value: "${master_mac}"
+    internal: true
+    set_action:
+      - lambda: |-
+          // Nutzt smarthome::smarthome_validate_master_mac() aus smarthome_command_dispatch.h
+          if (x.empty() || smarthome::smarthome_validate_master_mac(x)) {
+            id(stored_master_mac) = x;
+          } else {
+            auto call = id(setup_master_mac_text).make_call();
+            call.set_value(id(stored_master_mac));
+            call.perform();
+          }
+
+number:
+  - platform: template
+    id: setup_status_interval_number
+    name: "${device_name} ${setup_status_field_name}"
+    min_value: ${setup_status_min}
+    max_value: ${setup_status_max}
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: ${setup_status_default}
+    internal: true
+  - platform: template
+    id: setup_sensor_interval_number
+    name: "${device_name} ${setup_sensor_field_name}"
+    min_value: ${setup_sensor_min}
+    max_value: ${setup_sensor_max}
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: ${setup_sensor_default}
+    internal: true
+    on_value:
+      then:
+        - script.execute: apply_setup_sensor_interval
+
+button:
+  - platform: template
+    id: setup_portal_button
+    name: "${device_name} Setup"
+    internal: true
+    on_press:
+      - script.execute: enter_setup_portal

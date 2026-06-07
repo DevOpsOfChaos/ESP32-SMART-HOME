@@ -1,0 +1,381 @@
+# NET-SEN-020 - Wetterstation als MQTT-only Ersatzlinie
+
+substitutions:
+  node_name: net-sen-020
+  device_id: NET-SEN-020
+  device_name: NET-SEN Env BME280+VEML+Rain
+  device_class: net_sen
+  power_type: mains
+  fw_version: "1"
+  caps: "33052" # Bitmaske: TEMP(4)|HUM(8)|LUX(16)|RAIN(256)|PRESSURE(32768)
+  meta_schema_version: "1"
+  control_mode: none
+  config_profile: none
+  reporting_mode: hybrid
+  sensor_mask: THPLRXXXXX
+  input_mask: XXXXX
+  setup_ap_password: net-sen-setup
+  # 10 s Report-Intervall
+  setup_status_default: "10"
+  setup_sensor_default: "10" # 10 s Sensor-Intervall
+  setup_status_min: "5"
+  setup_status_max: "600"
+  setup_sensor_min: "5"
+  setup_sensor_max: "600"
+  i2c_sda_pin: GPIO0
+  i2c_scl_pin: GPIO1
+  rain_pin: GPIO3
+  setup_button_pin: GPIO2
+  bme280_address: "0x76"
+  veml7700_address: "0x10"
+  temp_offset_01c: "0"    # Temperatur-Offset in Zehntelgrad (negativ = nach unten korrigieren)
+  hum_offset_01pct: "0"   # Feuchte-Offset in Zehntelprozent
+
+packages:
+  contract_base: !include ../packages/smarthome_contract_base.yaml
+  command_ack: !include ../packages/smarthome_command_ack.yaml
+  device_event: !include ../packages/smarthome_device_event.yaml
+
+esphome:
+  name: ${node_name}
+  friendly_name: ${device_name}
+  includes:
+    - ../packages/setup_portal.h
+    - ../packages/smarthome_command_dispatch.h
+  on_boot:
+    priority: -10
+    then:
+      - lambda: |-
+          id(contract_online) = true;
+          id(rain_state) = id(rain_input).state;
+      - script.execute: apply_setup_sensor_interval
+      - script.execute: publish_contract_meta
+      - script.execute: publish_contract_availability
+      - script.execute: publish_net_sen_state
+      - script.execute: publish_boot_event
+
+esp32:
+  board: esp32-c3-devkitm-1
+  toolchain: platformio
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${node_name}-setup
+    password: ${setup_ap_password}
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  topic_prefix: smarthome/device/${device_id}/internal
+  discovery: false
+  log_topic: null
+  shutdown_message: null
+  birth_message:
+    topic: smarthome/device/${device_id}/availability
+    retain: true
+    payload: '{"device_id":"${device_id}","availability":"online","online":true,"power_type":"${power_type}"}'
+  will_message:
+    topic: smarthome/device/${device_id}/availability
+    retain: true
+    payload: '{"device_id":"${device_id}","availability":"offline","online":false,"power_type":"${power_type}"}'
+  on_connect:
+    then:
+      - lambda: |-
+          id(contract_online) = true;
+          if (id(setup_portal_active)) {
+            SmartHomeSetupPortal::stop();
+            id(setup_portal_active) = false;
+          }
+      - script.execute: publish_contract_meta
+      - script.execute: publish_contract_availability
+      - script.execute: publish_net_sen_state
+  on_disconnect:
+    then:
+      - lambda: |-
+          id(contract_online) = false;
+      - script.execute: publish_contract_availability
+  on_json_message:
+    - topic: smarthome/device/${device_id}/command
+      then:
+        - lambda: |-
+            std::string request_id;
+            if (!smarthome::smarthome_extract_request_id(x, request_id)) {
+              id(contract_fault) = true;
+              id(contract_last_status_code) = -20;
+              id(contract_last_status_text) = "missing_request_id";
+              return;
+            }
+
+            std::string command = "";
+            if (x["command"].is<const char*>()) {
+              command = x["command"].as<std::string>();
+            }
+
+            auto queue_ack = [&](const char *status, int status_code, const char *source) {
+              id(ack_request_id) = request_id;
+              id(ack_status) = status;
+              id(ack_status_code) = status_code;
+              id(ack_source) = source;
+              id(flush_command_ack).execute();
+            };
+
+            if (command == "get_state") {
+              id(clear_contract_fault).execute();
+              id(publish_net_sen_state).execute();
+              queue_ack("ok", 0, "node_ack");
+              return;
+            }
+
+            if (command == "set_config") {
+              if (!x["values"].is<JsonObjectConst>()) {
+                id(contract_fault) = true;
+                id(contract_last_status_code) = -21;
+                id(contract_last_status_text) = "invalid_payload";
+                queue_ack("invalid_payload", -21, "device_validation");
+                return;
+              }
+
+              JsonObjectConst values = x["values"].as<JsonObjectConst>();
+              bool changed = false;
+              bool invalid = false;
+              if (values["master_mac"].is<const char*>()) {
+                std::string master_mac = values["master_mac"].as<std::string>();
+                if (smarthome::smarthome_validate_master_mac(master_mac)) {
+                  id(stored_master_mac) = master_mac;
+                  id(setup_master_mac_text).publish_state(master_mac);
+                  changed = true;
+                } else {
+                  invalid = true;
+                }
+              }
+
+              if (invalid) {
+                id(contract_fault) = true;
+                id(contract_last_status_code) = -21;
+                id(contract_last_status_text) = "invalid_payload";
+                queue_ack("invalid_payload", -21, "device_validation");
+                return;
+              }
+
+              id(clear_contract_fault).execute();
+              id(publish_contract_meta).execute();
+              id(publish_contract_availability).execute();
+              id(publish_net_sen_state).execute();
+              queue_ack("ok", 0, "node_ack");
+              return;
+            }
+
+            id(contract_fault) = true;
+            id(contract_last_status_code) = -2;
+            id(contract_last_status_text) = "unsupported";
+            queue_ack("unsupported", -2, "master_validation");
+
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  scan: true
+
+globals:
+  - id: env_has_temp
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_hum
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_pressure
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_lux
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: hardware_fault
+    type: bool
+    restore_value: no
+    initial_value: "false"
+    # Design-Limit: env_has_*-Flags sind Einweg-Latches (werden nur auf true gesetzt).
+    # Ein Sensorausfall NACH erfolgreichem Erstkontakt wird NICHT erkannt.
+    # ESPHome bietet kein on_failure fuer I2C-Sensoren in YAML.
+    # Vollstaendige Erkennung braeuchte last_*_ms + Timeout (180s).
+    # Aktuell: nur "Sensor nie erreicht" wird als Fault gemeldet.
+  - id: env_temp_01c
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: env_hum_01pct
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: env_pressure_pa
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: env_lux
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: rain_state
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+script:
+  - id: apply_setup_sensor_interval
+    then:
+      - lambda: |-
+          const uint32_t interval_ms = (uint32_t) id(setup_sensor_interval_number).state * 1000UL;
+          id(env_bme280_component).set_update_interval(interval_ms);
+          id(env_veml7700_sensor).set_update_interval(interval_ms);
+
+  - id: publish_net_sen_state
+    then:
+      - mqtt.publish_json:
+          topic: smarthome/device/${device_id}/state
+          retain: true
+          payload: |-
+            id(hardware_fault) = !id(env_has_temp) || !id(env_has_hum) || !id(env_has_pressure) || !id(env_has_lux);
+            root["device_id"] = "${device_id}";
+            if (id(env_has_temp)) root["temp_01c"] = id(env_temp_01c); else root["temp_01c"] = nullptr;
+            if (id(env_has_hum)) root["hum_01pct"] = id(env_hum_01pct); else root["hum_01pct"] = nullptr;
+            if (id(env_has_lux)) root["lux"] = id(env_lux); else root["lux"] = nullptr;
+            if (id(env_has_pressure)) root["pressure_pa"] = id(env_pressure_pa); else root["pressure_pa"] = nullptr;
+            root["gas_ohm"] = nullptr;
+            root["aqi"] = nullptr;
+            root["tvoc_ppb"] = nullptr;
+            root["eco2_ppm"] = nullptr;
+            root["motion"] = false;
+            root["rain_raw"] = id(rain_state) ? 1 : 0;
+            root["fault"] = id(hardware_fault) || id(contract_fault);
+
+binary_sensor:
+  - platform: gpio
+    id: setup_button
+    name: "${device_name} Setup Button"
+    internal: true
+    pin:
+      number: ${setup_button_pin}
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 35ms # 35 ms Entprellzeit
+      - delayed_off: 35ms # 35 ms Entprellzeit
+    on_press:
+      then:
+        - delay: 5s # 5 s Haltezeit Setup-Portal
+        - if:
+            condition:
+              binary_sensor.is_on: setup_button
+            then:
+              - script.execute: enter_setup_portal
+  - platform: gpio
+    id: rain_input
+    name: "${device_name} Rain"
+    pin:
+      number: ${rain_pin}
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 35ms # 35 ms Entprellzeit
+      - delayed_off: 35ms # 35 ms Entprellzeit
+    on_state:
+      then:
+        - lambda: 'id(rain_state) = x;'
+        - lambda: |-
+            id(event_type) = 5;
+            id(event_trigger) = 3;
+            id(event_param1) = x ? 1 : 0;
+            id(event_param2) = x ? 1 : 0;
+        - script.execute: flush_device_event
+        - script.execute: publish_net_sen_state
+
+sensor:
+  - platform: bme280_i2c
+    id: env_bme280_component
+    address: ${bme280_address}
+    update_interval: ${setup_sensor_default}s # Wird im Setup ueber sensor_interval angepasst.
+    temperature:
+      id: env_temperature_sensor
+      name: "${device_name} Temperature"
+      oversampling: 16x # 16x Oversampling: interne Filterung ausreichend, kein zusaetzlicher EMA-Filter noetig.
+      on_value:
+        then:
+          - lambda: |-
+              id(env_temp_01c) = (int) lroundf(x * 10.0f) + atoi("${temp_offset_01c}");
+              id(env_has_temp) = true;
+          - script.execute: clear_contract_fault
+          - script.execute: publish_net_sen_state
+    humidity:
+      id: env_humidity_sensor
+      name: "${device_name} Humidity"
+      oversampling: 16x # 16x Oversampling: interne Filterung ausreichend, kein zusaetzlicher EMA-Filter noetig.
+      on_value:
+        then:
+          - lambda: |-
+              int hum_01pct = (int) lroundf(x * 10.0f) + atoi("${hum_offset_01pct}");
+              if (hum_01pct < 0) hum_01pct = 0;
+              if (hum_01pct > 1000) hum_01pct = 1000;
+              id(env_hum_01pct) = hum_01pct;
+              id(env_has_hum) = true;
+          - script.execute: clear_contract_fault
+          - script.execute: publish_net_sen_state
+    pressure:
+      id: env_pressure_sensor
+      name: "${device_name} Pressure"
+      oversampling: 16x # 16x Oversampling: interne Filterung ausreichend, kein zusaetzlicher EMA-Filter noetig.
+      on_value:
+        then:
+          - lambda: |-
+              id(env_pressure_pa) = (int) lroundf(x * 100.0f);
+              id(env_has_pressure) = true;
+          - script.execute: clear_contract_fault
+          - script.execute: publish_net_sen_state
+  - platform: veml7700
+    address: ${veml7700_address}
+    update_interval: ${setup_sensor_default}s # Wird im Setup ueber sensor_interval angepasst.
+    id: env_veml7700_sensor
+    ambient_light:
+      name: "${device_name} Illuminance"
+      on_value:
+        then:
+          - lambda: |-
+              id(env_lux) = (int) lroundf(x);
+              id(env_has_lux) = true;
+          - script.execute: clear_contract_fault
+          - script.execute: publish_net_sen_state
+
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              static uint32_t last_status_publish_ms = 0;
+              const uint32_t now = millis();
+              const uint32_t interval_ms = (uint32_t) id(setup_status_interval_number).state * 1000UL;
+              if (last_status_publish_ms == 0 || now - last_status_publish_ms >= interval_ms) {
+                last_status_publish_ms = now;
+                return true;
+              }
+              return false;
+          then:
+            - script.execute: publish_net_sen_state
+  - interval: 5min # 5 min = 300 s periodischer Refresh (Meta, Availability, State)
+    then:
+      - script.execute: publish_contract_meta
+      - script.execute: publish_contract_availability
+      - script.execute: publish_net_sen_state

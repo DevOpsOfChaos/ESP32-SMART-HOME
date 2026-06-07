@@ -1,0 +1,23 @@
+G04 #@! TF.GenerationSoftware,KiCad,Pcbnew,9.0.5*
+G04 #@! TF.CreationDate,2025-11-30T17:46:52+01:00*
+G04 #@! TF.ProjectId,Sensor_all_ESP32,53656e73-6f72-45f6-916c-6c5f45535033,rev?*
+G04 #@! TF.SameCoordinates,Original*
+G04 #@! TF.FileFunction,Profile,NP*
+%FSLAX46Y46*%
+G04 Gerber Fmt 4.6, Leading zero omitted, Abs format (unit mm)*
+G04 Created by KiCad (PCBNEW 9.0.5) date 2025-11-30 17:46:52*
+%MOMM*%
+%LPD*%
+G01*
+G04 APERTURE LIST*
+G04 #@! TA.AperFunction,Profile*
+%ADD10C,0.050000*%
+G04 #@! TD*
+G04 APERTURE END LIST*
+D10*
+X118100000Y-53000000D02*
+X167000000Y-53000000D01*
+X167000000Y-97000000D01*
+X118100000Y-97000000D01*
+X118100000Y-53000000D01*
+M02*

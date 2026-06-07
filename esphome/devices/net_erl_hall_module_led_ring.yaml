@@ -1,0 +1,1517 @@
+# NET-ERL-020 - Hall Module LED Ring als MQTT-only Ersatzlinie
+
+# Aenderungshistorie:
+#   [2026-05-27] LED-Ring-Animation an Firmware (main.cpp) angeglichen:
+#     - ringScale/ringColor/ringDimColor-Logik uebernommen
+#     - Offline-Blink entfernt (nicht in Firmware)
+#     - contract_online-Check entfernt (nicht in Firmware)
+#   [2026-05-27] Crash-Fix: esp32_rmt_led_strip -> fastled_clockless
+#     AdressableLightEffect::start_internal() crashte mit Load access fault
+#     (MEPC 0x420101be, MTVAL 0x70) direkt nach I2C-Init, weil Parent-
+#     LightState* des Effects NULL war (ESPHome 2026.5.1 / ESP32-C3 RMT-Bug).
+#     Workaround: fastled_clockless nutzt Bit-Banging statt RMT-Treiber.
+#     chipset: WS2812 -> WS2812B, max_refresh_rate: 120ms hinzugefuegt.
+
+#   [2026-05-28] I2C auf 100kHz (STANDARD-I2C fuer BME680, VEML7700, ENS160)
+#   [2026-05-28] I2C zurueck auf 50kHz (bewaehrt), Scan aktiviert zur Bus-Verifikation
+#   [2026-05-27] LED-Helligkeit 20%%, Auto-On ohne Lux nach 5s (VEML7700-Toleranz),
+#     I2C 20kHz getestet (rueckgaengig)
+  #   [2026-05-28] Stabilisierungspatch: LED-Ring-Re-Trigger, I2C-Doppelpoll,
+  #     AQI-Farben, hardware_fault-Loop, Contract-/Event-Kleinkorrekturen.
+substitutions:
+  node_name: net-erl-020
+  device_id: NET-ERL-020
+  device_name: NET-ERL Hall Module LED Ring
+  device_class: net_erl
+  power_type: mains
+  fw_version: "1"
+  caps: "54397" # Bitmaske: RELAY(1)|TEMP(4)|HUM(8)|LUX(16)|AQI(32)|MOTION(64)|BUTTON(1024)|LED_RING(4096)|GAS(16384)|PRESSURE(32768)
+  meta_schema_version: "1"
+  control_mode: relay_light
+  config_profile: hall_module_led_ring
+  reporting_mode: hybrid
+  sensor_mask: THLPGAMXXX
+  input_mask: BXXXX
+  setup_ap_password: net-erl-setup
+  setup_status_default: "60"
+  setup_sensor_default: "60"
+  setup_status_min: "5"
+  setup_status_max: "600"
+  setup_sensor_min: "5"
+  setup_sensor_max: "600"
+  report_interval_s: "10" # 10 s Report-Intervall (State alle 10 s senden)
+  auto_on_lux_threshold: "250" # 250 Lux: unterhalb dieser Schwelle schaltet Auto-Light ein
+  auto_off_delay_s: "15" # 15 s Nachlaufzeit nach letzter Bewegung
+  relay_pin: GPIO10
+  button_pin: GPIO6
+  presence_pin: GPIO7
+  presence_poll_interval: 50ms
+  led_ring_pin: GPIO4
+  led_ring_count: "17" # 17 NeoPixel-LEDs im Ring
+  led_ring_default_brightness_pct: "30" # 30 % Helligkeit (Standard, 1-60 %)
+  led_ring_air_quality_phase_s: "15" # 15 s Anzeigedauer AQI-Phase
+  led_ring_temperature_phase_s: "15" # 15 s Anzeigedauer Temperatur-Phase
+  led_ring_humidity_phase_s: "15" # 15 s Anzeigedauer Feuchte-Phase
+  i2c_sda_pin: GPIO0
+  i2c_scl_pin: GPIO1
+  bme680_address: "0x77"
+  veml7700_address: "0x10"
+  ens160_address: "0x52"
+  temp_offset_01c: "0"    # Temperatur-Offset in Zehntelgrad (negativ = nach unten korrigieren)
+  hum_offset_01pct: "0"   # Feuchte-Offset in Zehntelprozent
+
+packages:
+  contract_base: !include ../packages/smarthome_contract_base.yaml
+  command_ack: !include ../packages/smarthome_command_ack.yaml
+  device_event: !include ../packages/smarthome_device_event.yaml
+
+esphome:
+  name: ${node_name}
+  friendly_name: ${device_name}
+  includes:
+    - ../packages/setup_portal.h
+    - ../packages/smarthome_command_dispatch.h
+  on_boot:
+    - priority: -10
+      then:
+        - lambda: |-
+            const uint32_t now = millis();
+            // contract_online wird ausschliesslich in mqtt.on_connect/on_disconnect gesetzt.
+            id(relay_1_state) = id(relay_1_output).state;
+            id(motion_state) = id(presence_input).state;
+            id(bme680_init_ms) = now;
+            id(ens160_init_ms) = now;
+            if (id(motion_state)) {
+              id(last_motion_ms) = now;
+              if (!id(relay_1_state)) {
+                id(pending_auto_on_decision) = true;
+              }
+            }
+        - script.execute: apply_setup_sensor_interval
+        - component.update: env_bme680_component
+        - delay: 2s
+        - component.update: env_veml7700_sensor
+        - delay: 2s
+        - component.update: env_ens160_component
+        - script.execute: publish_contract_meta
+        - script.execute: publish_contract_availability
+        - script.execute: publish_net_erl_led_state
+        - script.execute: publish_boot_event
+        # Boot-Test: RGB-Sweep analog Firmware ensureRingInitialized (Rot->Gruen->Blau->Aus)
+        - logger.log: 'LED Ring Boot-Test: RGB'
+        - light.turn_on:
+            id: led_ring_light
+            brightness: 50%
+            red: 100%
+            green: 0%
+            blue: 0%
+        - delay: 180ms
+        - light.turn_on:
+            id: led_ring_light
+            brightness: 50%
+            red: 0%
+            green: 100%
+            blue: 0%
+        - delay: 180ms
+        - light.turn_on:
+            id: led_ring_light
+            brightness: 50%
+            red: 0%
+            green: 0%
+            blue: 100%
+        - delay: 180ms
+        - light.turn_off: led_ring_light
+        - delay: 180ms
+        # Boot-Test: LED-Ring-Sequenz einmalig starten (analog zur Firmware ensureRingInitialized)
+        # Zeigt mindestens die AQI-Phase an, auch ohne Praesenzsensor.
+        - script.execute: start_led_ring_comfort_sequence
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: arduino
+
+
+logger:
+  level: DEBUG
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: ${node_name}-setup
+    password: ${setup_ap_password}
+
+mqtt:
+  broker: !secret mqtt_broker
+  username: !secret mqtt_username
+  password: !secret mqtt_password
+  topic_prefix: smarthome/device/${device_id}/internal
+  discovery: false
+  log_topic: null
+  shutdown_message: null
+  birth_message:
+    topic: smarthome/device/${device_id}/availability
+    retain: true
+    payload: '{"device_id":"${device_id}","availability":"online","online":true,"power_type":"${power_type}"}'
+  will_message:
+    topic: smarthome/device/${device_id}/availability
+    retain: true
+    payload: '{"device_id":"${device_id}","availability":"offline","online":false,"power_type":"${power_type}"}'
+  on_connect:
+    then:
+      - lambda: |-
+          id(contract_online) = true;
+          if (id(setup_portal_active)) {
+            SmartHomeSetupPortal::stop();
+            id(setup_portal_active) = false;
+          }
+      - script.execute: publish_contract_meta
+      - script.execute: publish_contract_availability
+      - script.execute: publish_net_erl_led_state
+  on_disconnect:
+    then:
+      - lambda: |-
+          id(contract_online) = false;
+      - script.execute: publish_contract_availability
+  on_json_message:
+    - topic: smarthome/device/${device_id}/command
+      then:
+        - lambda: |-
+            std::string request_id;
+            if (!smarthome::smarthome_extract_request_id(x, request_id)) {
+              id(contract_fault) = true;
+              id(contract_last_status_code) = -20;
+              id(contract_last_status_text) = "missing_request_id";
+              return;
+            }
+
+            std::string command = "";
+            if (x["command"].is<const char*>()) {
+              command = x["command"].as<std::string>();
+            }
+
+            auto queue_ack = [&](const char *status, int status_code, const char *source) {
+              id(ack_request_id) = request_id;
+              id(ack_status) = status;
+              id(ack_status_code) = status_code;
+              id(ack_source) = source;
+              id(flush_command_ack).execute();
+            };
+
+            if (command == "get_state") {
+              id(clear_contract_fault).execute();
+              id(publish_net_erl_led_state).execute();
+              id(trigger_led_ring_ack_ok).execute();
+              queue_ack("ok", 0, "node_ack");
+              return;
+            }
+
+            if (command == "set_relay") {
+              bool relay_value = false;
+              bool relay_value_ok = false;
+              if (x["relay_1"].is<bool>()) {
+                relay_value = x["relay_1"].as<bool>();
+                relay_value_ok = true;
+              } else if (x["relay_1"].is<int>()) {
+                relay_value = x["relay_1"].as<int>() != 0;
+                relay_value_ok = true;
+              } else if (x["relay_1"].is<const char*>()) {
+                std::string relay_text = x["relay_1"].as<std::string>();
+                if (relay_text == "true" || relay_text == "1" || relay_text == "on") {
+                  relay_value = true;
+                  relay_value_ok = true;
+                } else if (relay_text == "false" || relay_text == "0" || relay_text == "off") {
+                  relay_value = false;
+                  relay_value_ok = true;
+                }
+              }
+              if (!relay_value_ok) {
+                id(contract_fault) = true;
+                id(contract_last_status_code) = -21;
+                id(contract_last_status_text) = "invalid_payload";
+                queue_ack("invalid_payload", -21, "master_validation");
+                return;
+              }
+
+              const uint32_t now = millis();
+              id(relay_auto_owned) = false;
+              id(pending_auto_on_decision) = false;
+              id(blocked_by_lux) = false;
+              if (relay_value) {
+                id(manual_follow_motion_active) = true;
+                id(manual_follow_motion_seen) = id(presence_input).state;
+                id(manual_follow_motion_probe_active) = false;
+                id(manual_follow_started_ms) = now;
+                id(manual_follow_probe_started_ms) = 0;
+                if (id(presence_input).state) {
+                  id(motion_state) = true;
+                  id(last_motion_ms) = now;
+                }
+                id(relay_1_output).turn_on();
+                id(event_type) = 6; id(event_trigger) = 2; id(event_param1) = 1; id(event_param2) = 0;
+                id(flush_device_event).execute();
+              } else {
+                id(manual_follow_motion_active) = false;
+                id(manual_follow_motion_seen) = false;
+                id(manual_follow_motion_probe_active) = false;
+                id(manual_follow_started_ms) = 0;
+                id(manual_follow_probe_started_ms) = 0;
+                id(explicit_off_hold) = id(presence_input).state;
+                if (id(explicit_off_hold)) {
+                  id(motion_state) = true;
+                  id(last_motion_ms) = now;
+                }
+                id(relay_1_output).turn_off();
+                id(event_type) = 6; id(event_trigger) = 2; id(event_param1) = 0; id(event_param2) = 0;
+                id(flush_device_event).execute();
+              }
+              id(clear_contract_fault).execute();
+              id(publish_net_erl_led_state).execute();
+              id(trigger_led_ring_ack_ok).execute();
+              queue_ack("ok", 0, "node_ack");
+              return;
+            }
+
+            // ESPHome-Komfortfunktion, nicht Bestandteil der Technikerprojekt-Firmwarelinie:
+            // Diese lokale Config steuert nur die optionale LED-Ring-Anzeige dieses MQTT-only
+            // ESPHome-Geraets. Der Serververtrag funktioniert unveraendert ohne diese Felder.
+            if (command == "set_config") {
+              bool changed = false;
+              if (!x["values"].is<JsonObjectConst>()) {
+                id(contract_fault) = true;
+                id(contract_last_status_code) = -21;
+                id(contract_last_status_text) = "invalid_payload";
+                queue_ack("invalid_payload", -21, "device_validation");
+                return;
+              }
+
+              JsonObjectConst values = x["values"].as<JsonObjectConst>();
+
+              // BUG-004: Validate-First Apply-Second Pattern
+              // Phase 1: alle Felder validieren, Werte zwischenspeichern
+              bool invalid = false;
+              int new_brightness = -1;
+              bool has_brightness = false;
+              bool has_ring_enabled = false;
+              bool new_ring_enabled = false;
+              std::string new_master_mac;
+              bool has_master_mac = false;
+
+              if (values["ring_brightness_pct"].is<int>()) {
+                int brightness = values["ring_brightness_pct"].as<int>();
+                if (brightness < 1 || brightness > 60) {
+                  invalid = true;
+                } else {
+                  new_brightness = brightness;
+                  has_brightness = true;
+                }
+              }
+              if (values["ring_enabled"].is<bool>()) {
+                new_ring_enabled = values["ring_enabled"].as<bool>();
+                has_ring_enabled = true;
+              }
+              if (values["master_mac"].is<const char*>()) {
+                std::string master_mac = values["master_mac"].as<std::string>();
+                if (smarthome::smarthome_validate_master_mac(master_mac)) {
+                  new_master_mac = master_mac;
+                  has_master_mac = true;
+                } else {
+                  invalid = true;
+                }
+              }
+
+              if (invalid) {
+                id(contract_fault) = true;
+                id(contract_last_status_code) = -21;
+                id(contract_last_status_text) = "invalid_payload";
+                queue_ack("invalid_payload", -21, "device_validation");
+                return;
+              }
+
+              // Phase 2: validierte Werte anwenden
+              if (has_brightness) {
+                id(led_ring_brightness_pct) = new_brightness;
+                changed = true;
+              }
+              if (has_ring_enabled) {
+                id(led_ring_enabled) = new_ring_enabled;
+                changed = true;
+              }
+              if (has_master_mac) {
+                id(stored_master_mac) = new_master_mac;
+                id(setup_master_mac_text).publish_state(new_master_mac);
+                changed = true;
+              }
+
+              id(clear_contract_fault).execute();
+              id(trigger_led_ring_ack_ok).execute();
+              id(refresh_led_ring_comfort_display).execute();
+              id(publish_contract_meta).execute();
+              id(publish_contract_availability).execute();
+              id(publish_net_erl_led_state).execute();
+              queue_ack("ok", 0, "device_ack");
+              return;
+            }
+            // Ende ESPHome-Komfortfunktion.
+
+            id(contract_fault) = true;
+            id(contract_last_status_code) = -2;
+            id(contract_last_status_text) = "unsupported";
+            queue_ack("unsupported", -2, "master_validation");
+
+i2c:
+  sda: ${i2c_sda_pin}
+  scl: ${i2c_scl_pin}
+  frequency: 10kHz  # 10 kHz - einziger stabiler Takt fuer 2kO/Multisensor-Bus
+  scan: false  # Scan deaktiviert (reduziert Bus-Last beim Boot)
+
+globals:
+  - id: relay_1_state
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: motion_state
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: relay_auto_owned
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: blocked_by_lux
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: pending_auto_on_decision
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  # Auto-On ohne Lux-Wert: Timer fuer VEML7700-Ausfall-Toleranz
+  - id: pending_auto_on_since_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: manual_follow_motion_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: manual_follow_motion_seen
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: manual_follow_motion_probe_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: explicit_off_hold
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: last_motion_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: manual_follow_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: manual_follow_probe_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: button_pressed_at_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: button_setup_hold_consumed
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: bme680_gas_read_count
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: env_has_temp
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_hum
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_pressure
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_gas
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_lux
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_aqi
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_eco2
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: env_has_tvoc
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  - id: hardware_fault
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  # I2C-Robustheit: Letzte erfolgreiche Update-Zeitstempel (0 = noch nie gelesen).
+  # Werden in jedem on_value-Handler gesetzt. Ein 30s-Monitor-Intervall
+  # prueft auf Stale-Sensoren und setzt env_has_*-Flags zurueck.
+  - id: last_bme_update_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: last_veml_update_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: last_ens_update_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  # I2C-Robustheit: Kumulierte Fehlerzaehler (zaehlt Stale-Epochen, max 255).
+  - id: bme_fail_count
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: veml_fail_count
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: ens_fail_count
+    type: int
+    restore_value: no
+    initial_value: "0"
+  # I2C-Robustheit: Init-Zeitstempel (relativer Warmup statt absolute millis()).
+  # Ermoeglicht korrekten Warmup-Neustart nach Sensor-Recovery.
+  - id: bme680_init_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: ens160_init_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: env_temp_01c
+    type: int
+    restore_value: no
+    initial_value: "-32768" # INT16_MIN = Sentinel "kein Messwert"
+  - id: env_hum_01pct
+    type: int
+    restore_value: no
+    initial_value: "65535" # 0xFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_pressure_pa
+    type: uint32_t
+    restore_value: no
+    initial_value: "4294967295UL" # 0xFFFFFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_gas_ohm
+    type: uint32_t
+    restore_value: no
+    initial_value: "4294967295UL" # 0xFFFFFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_lux
+    type: int
+    restore_value: no
+    initial_value: "65535" # 0xFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_aqi
+    type: int
+    restore_value: no
+    initial_value: "65535" # 0xFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_tvoc_ppb
+    type: int
+    restore_value: no
+    initial_value: "65535" # 0xFFFF = Sentinel "kein gueltiger Wert"
+  - id: env_eco2_ppm
+    type: int
+    restore_value: no
+    initial_value: "65535" # 0xFFFF = Sentinel "kein gueltiger Wert"
+  # Sensor-Mittelwertfilter: Letzte publizierte Werte fuer Change-Detection
+  - id: last_pub_temp_01c
+    type: int
+    restore_value: no
+    initial_value: "-32768"
+  - id: last_pub_hum_01pct
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  - id: last_pub_pressure_pa
+    type: uint32_t
+    restore_value: no
+    initial_value: "4294967295UL"
+  - id: last_pub_lux
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  - id: last_pub_gas_ohm
+    type: uint32_t
+    restore_value: no
+    initial_value: "4294967295UL"
+  - id: last_pub_aqi
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  - id: last_pub_eco2_ppm
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  - id: last_pub_tvoc_ppb
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  # Lux-Unterdrueckung bei eingeschalteter Lampe
+  - id: last_lux_dark
+    type: int
+    restore_value: no
+    initial_value: "65535"
+  - id: lux_dark_valid
+    type: bool
+    restore_value: no
+    initial_value: "false"
+  # LED-Ring-Anzeige:
+  # Teil des Funktionsumfangs ist nur die lokale Luftqualitaetsanzeige per AQI.
+  # Die weiteren Zustandswerte dienen optionalen ESPHome-Komfortanimationen und
+  # erweitern nicht den oeffentlichen MQTT-Serververtrag.
+  - id: led_ring_enabled
+    type: bool
+    restore_value: yes
+    initial_value: "true"
+  - id: led_ring_brightness_pct
+    type: int
+    restore_value: yes
+    initial_value: "${led_ring_default_brightness_pct}"
+  - id: led_ring_sequence_started_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: led_ring_display_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  - id: led_ring_alert_code
+    type: int
+    restore_value: no
+    initial_value: "0"
+  - id: led_ring_alert_until_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: "0"
+  # Ende ESPHome-Komfortfunktion.
+
+script:
+  - id: apply_setup_sensor_interval
+    then:
+      - lambda: |-
+          // I2C bus stabilization: sensor polling is now driven by staggered
+          // interval: blocks (53s VEML7700, 59s ENS160, 61s BME680) instead of
+          // per-sensor update_interval. This prevents simultaneous I2C transactions
+          // on the shared 50kHz/2kΩ bus. The setup_sensor_interval_number is
+          // retained for backward compatibility with the setup portal but is unused.
+          ESP_LOGV("i2c_stagger", "setup_sensor_interval=%d (unused; staggered polling active)",
+                   (int) id(setup_sensor_interval_number).state);
+
+  - id: publish_net_erl_led_state
+    then:
+      - lambda: |-
+          // Boot-Grace: 120s nach Boot kein Fault (gestaffeltes Polling braucht bis 61s)
+          static const uint32_t boot_grace_ms = 120000UL;
+          id(hardware_fault) = (millis() < boot_grace_ms) ? false : 
+              (!id(env_has_temp) || !id(env_has_hum) || !id(env_has_lux));
+      - if:
+          condition:
+            lambda: return id(contract_online);
+          then:
+            - mqtt.publish_json:
+                topic: smarthome/device/${device_id}/state
+                retain: true
+                payload: |-
+                  root["device_id"] = "${device_id}";
+                  root["relay_1"] = id(relay_1_state);
+                  // Sentinel-Werte (-32768, 65535, 4294967295) als JSON-null ausgeben.
+                  // Entspricht dem Verhalten der Firmware-Master-MQTT-Bruecke.
+                  if (id(env_has_temp) && id(env_temp_01c) > -400 && id(env_temp_01c) < 850) root["temp_01c"] = id(env_temp_01c); else root["temp_01c"] = nullptr;
+                  if (id(env_has_hum) && id(env_hum_01pct) >= 0 && id(env_hum_01pct) <= 1000) root["hum_01pct"] = id(env_hum_01pct); else root["hum_01pct"] = nullptr;
+                  if (id(env_has_lux) && id(lux_dark_valid)) {
+                    if (id(relay_1_state)) {
+                      root["lux"] = id(last_lux_dark);
+                    } else {
+                      root["lux"] = id(env_lux);
+                    }
+                  } else {
+                    root["lux"] = nullptr;
+                  }
+                  if (id(env_has_pressure) && id(env_pressure_pa) > 30000 && id(env_pressure_pa) < 110000) root["pressure_pa"] = id(env_pressure_pa); else root["pressure_pa"] = nullptr;
+                  if (id(env_has_gas))  root["gas_ohm"] = id(env_gas_ohm);
+                  else root["gas_ohm"] = nullptr;
+                  if (id(env_has_aqi)) root["aqi"] = id(env_aqi);
+                  else root["aqi"] = nullptr;
+                  if (id(env_has_tvoc)) root["tvoc_ppb"] = id(env_tvoc_ppb);
+                  else root["tvoc_ppb"] = nullptr;
+                  if (id(env_has_eco2)) root["eco2_ppm"] = id(env_eco2_ppm);
+                  else root["eco2_ppm"] = nullptr;
+                  root["motion"] = id(motion_state);
+                  int auto_flags_val = 0;
+                  auto_flags_val |= 0x20;
+                  if (id(env_has_lux)) auto_flags_val |= 0x40;
+                  auto_flags_val |= 0x80;
+                  if (id(relay_auto_owned)) auto_flags_val |= 0x02;
+                  if (id(blocked_by_lux)) auto_flags_val |= 0x08;
+                  if (id(pending_auto_on_decision)) auto_flags_val |= 0x01;
+                  root["auto_flags"] = auto_flags_val;
+                  root["report_interval_s"] = (int) id(setup_status_interval_number).state;
+                  root["auto_on_lux_threshold"] = atoi("${auto_on_lux_threshold}");
+                  root["fault"] = id(hardware_fault) || id(contract_fault);
+            - lambda: |-
+                id(last_pub_temp_01c) = id(env_temp_01c);
+                id(last_pub_hum_01pct) = id(env_hum_01pct);
+                id(last_pub_pressure_pa) = id(env_pressure_pa);
+                if (id(lux_dark_valid) && id(relay_1_state)) {
+                  id(last_pub_lux) = id(last_lux_dark);
+                } else {
+                  id(last_pub_lux) = id(env_lux);
+                }
+                id(last_pub_gas_ohm) = id(env_gas_ohm);
+                id(last_pub_aqi) = id(env_aqi);
+                id(last_pub_eco2_ppm) = id(env_eco2_ppm);
+                id(last_pub_tvoc_ppb) = id(env_tvoc_ppb);
+
+  # LED-Ring-Anzeige:
+  # Teil des Funktionsumfangs ist die erste Phase: Luftqualitaet per AQI.
+  # Die anschliessenden Temperatur-/Feuchtephasen sind ESPHome-Komfortfunktion
+  # und nicht Bestandteil der Technikerprojekt-Firmwarelinie.
+  - id: start_led_ring_comfort_sequence
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          if ((int32_t) (id(led_ring_display_until_ms) - now) <= 0) {
+            id(led_ring_sequence_started_ms) = now;
+          }
+          static const uint32_t total_ms =
+            ((uint32_t) atoi("${led_ring_air_quality_phase_s}") +
+             (uint32_t) atoi("${led_ring_temperature_phase_s}") +
+             (uint32_t) atoi("${led_ring_humidity_phase_s}")) * 1000UL;
+          id(led_ring_display_until_ms) = now + total_ms;
+      - script.execute: refresh_led_ring_comfort_display
+
+  - id: trigger_led_ring_lux_blocked
+    then:
+      # ESPHome-Komfortfunktion, nicht Bestandteil der Technikerprojekt-Firmwarelinie.
+      - lambda: |-
+          id(led_ring_alert_code) = 1;
+          id(led_ring_alert_until_ms) = millis() + 3000UL;
+      - script.execute: refresh_led_ring_comfort_display
+
+  - id: trigger_led_ring_ack_ok
+    then:
+      # ESPHome-Komfortfunktion, nicht Bestandteil der Technikerprojekt-Firmwarelinie.
+      - lambda: |-
+          id(led_ring_alert_code) = 2;
+          id(led_ring_alert_until_ms) = millis() + 1200UL;
+      - script.execute: refresh_led_ring_comfort_display
+
+  - id: refresh_led_ring_comfort_display
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const bool alert_active = id(led_ring_alert_code) != 0 &&
+            (int32_t) (id(led_ring_alert_until_ms) - now) > 0;
+          const bool display_active = (int32_t) (id(led_ring_display_until_ms) - now) > 0;
+
+          if (!id(led_ring_enabled)) {
+            auto call = id(led_ring_light).turn_off();
+            call.perform();
+            return;
+          }
+
+          if (!id(contract_online) || id(hardware_fault) || alert_active || display_active) {
+            auto call = id(led_ring_light).turn_on();
+            call.set_brightness(1.0f);
+            // Animation handled by led_ring_interval (no effects block)
+            call.perform();
+          } else {
+            auto call = id(led_ring_light).turn_off();
+            call.perform();
+          }
+  # Ende LED-Ring-Anzeige.
+
+  - id: evaluate_auto_on_from_lux
+    then:
+      - lambda: |-
+          if (!id(motion_state) || !id(pending_auto_on_decision) || id(relay_1_state)) {
+            return;
+          }
+          // VEML7700-Ausfall-Toleranz: ohne gueltigen Lux-Wert nach 5 s trotzdem einschalten
+          if (id(env_lux) == 65535) {
+            if (id(pending_auto_on_since_ms) > 0 && millis() - id(pending_auto_on_since_ms) < 5000UL) {
+              return; // Noch warten auf Lux-Wert
+            }
+            // Timeout: ohne Lux-Wert einschalten (VEML7700 nicht verfuegbar)
+            id(pending_auto_on_decision) = false;
+            id(relay_auto_owned) = true;
+            id(blocked_by_lux) = false;
+            id(relay_1_output).turn_on();
+            id(event_type) = 7; id(event_trigger) = 3; id(event_param1) = 1; id(event_param2) = 0;
+            id(flush_device_event).execute();
+            return;
+          }
+          id(pending_auto_on_decision) = false;
+          if (id(env_lux) <= atoi("${auto_on_lux_threshold}")) {
+            id(relay_auto_owned) = true;
+            id(blocked_by_lux) = false;
+            id(relay_1_output).turn_on();
+            id(event_type) = 7; id(event_trigger) = 3; id(event_param1) = 1; id(event_param2) = id(env_lux);
+            id(flush_device_event).execute();
+          } else {
+            id(blocked_by_lux) = true;
+            id(trigger_led_ring_lux_blocked).execute();
+            id(publish_net_erl_led_state).execute();
+          }
+
+  - id: handle_motion_on
+    then:
+      - logger.log: 'MOTION_HANDLER: triggered'
+      - lambda: |-
+          const uint32_t now = millis();
+          if (id(explicit_off_hold)) {
+            id(motion_state) = true;
+            id(last_motion_ms) = now;
+            id(start_led_ring_comfort_sequence).execute();
+            id(publish_net_erl_led_state).execute();
+            return;
+          }
+          id(motion_state) = true;
+          id(last_motion_ms) = now;
+          id(start_led_ring_comfort_sequence).execute();
+          id(event_type) = 2; id(event_trigger) = 3; id(event_param1) = 1; id(event_param2) = 0;
+          id(flush_device_event).execute();
+          id(blocked_by_lux) = false;
+          if (id(manual_follow_motion_active)) {
+            id(manual_follow_motion_seen) = true;
+            id(manual_follow_motion_probe_active) = false;
+            id(manual_follow_probe_started_ms) = 0;
+          }
+          if (!id(relay_1_state)) {
+            id(pending_auto_on_decision) = true;
+            id(pending_auto_on_since_ms) = now;
+            id(evaluate_auto_on_from_lux).execute();
+          }
+          id(publish_net_erl_led_state).execute();
+
+  - id: handle_manual_relay_toggle
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const bool new_relay_state = !id(relay_1_state);
+          id(relay_auto_owned) = false;
+          id(pending_auto_on_decision) = false;
+          id(blocked_by_lux) = false;
+          if (new_relay_state) {
+            id(manual_follow_motion_active) = true;
+            id(manual_follow_motion_seen) = id(presence_input).state;
+            id(manual_follow_motion_probe_active) = false;
+            id(manual_follow_started_ms) = now;
+            id(manual_follow_probe_started_ms) = 0;
+            if (id(presence_input).state) {
+              id(motion_state) = true;
+              id(last_motion_ms) = now;
+            }
+            id(relay_1_output).turn_on();
+            id(event_type) = 6; id(event_trigger) = 1; id(event_param1) = 1; id(event_param2) = 0;
+            id(flush_device_event).execute();
+          } else {
+            id(manual_follow_motion_active) = false;
+            id(manual_follow_motion_seen) = false;
+            id(manual_follow_motion_probe_active) = false;
+            id(manual_follow_started_ms) = 0;
+            id(manual_follow_probe_started_ms) = 0;
+            id(explicit_off_hold) = id(presence_input).state;
+            if (id(explicit_off_hold)) {
+              id(motion_state) = true;
+              id(last_motion_ms) = now;
+            }
+            id(relay_1_output).turn_off();
+            id(event_type) = 6; id(event_trigger) = 1; id(event_param1) = 0; id(event_param2) = 0;
+            id(flush_device_event).execute();
+          }
+          id(publish_net_erl_led_state).execute();
+
+switch:
+  - platform: gpio
+    id: relay_1_output
+    name: ${device_name}
+    internal: true
+    pin: ${relay_pin}
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      then:
+        - lambda: 'id(relay_1_state) = true;'
+        - script.execute: refresh_led_ring_comfort_display
+        - script.execute: publish_net_erl_led_state
+    on_turn_off:
+      then:
+        - lambda: 'id(relay_1_state) = false;'
+        - script.execute: refresh_led_ring_comfort_display
+        - script.execute: publish_net_erl_led_state
+
+binary_sensor:
+  - platform: gpio
+    id: presence_input
+    name: "${device_name} Presence"
+    internal: true
+    pin:
+      number: ${presence_pin}
+      mode:
+        input: true
+        pulldown: false
+        pullup: false
+    on_press:
+      then:
+        - logger.log: 'PRESENCE: motion detected (GPIO7 HIGH)'
+        - script.execute: handle_motion_on
+    on_release:
+      then:
+        - logger.log: 'PRESENCE: motion ended (GPIO7 LOW)'
+  - platform: gpio
+    id: local_button
+    name: "${device_name} Button"
+    internal: true
+    pin:
+      number: ${button_pin}
+      inverted: true
+      mode:
+        input: true
+        pullup: true
+    filters:
+      - delayed_on: 40ms # 40 ms Entprellzeit (Button)
+      - delayed_off: 40ms
+    on_press:
+      then:
+        - lambda: |-
+            id(button_pressed_at_ms) = millis();
+            id(button_setup_hold_consumed) = false;
+        - delay: 5s # 5 s Haltezeit fuer Setup-Portal-Trigger
+        - if:
+            condition:
+              binary_sensor.is_on: local_button
+            then:
+              - lambda: 'id(button_setup_hold_consumed) = true;'
+              - script.execute: enter_setup_portal
+    on_release:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                const uint32_t pressed_at = id(button_pressed_at_ms);
+                const uint32_t held_ms = pressed_at > 0 ? millis() - pressed_at : 0;
+                const bool setup_consumed = id(button_setup_hold_consumed);
+                id(button_pressed_at_ms) = 0;
+                id(button_setup_hold_consumed) = false;
+                return !setup_consumed && held_ms < 5000UL; // 5000 ms = 5 s (Setup-Hold-Schwelle)
+            then:
+              - script.execute: handle_manual_relay_toggle
+
+light:
+  - platform: fastled_clockless
+    id: led_ring_light
+    name: "${device_name} LED Ring"
+    internal: true
+    pin: ${led_ring_pin}
+    num_leds: ${led_ring_count}
+    rgb_order: GRB
+    chipset: WS2812B
+    max_refresh_rate: 100ms  # BUG-008: kuerzer als 120ms Intervall (kein Frame-Drop durch Jitter)
+
+sensor:
+  - platform: bme680
+    id: env_bme680_component
+    address: ${bme680_address}
+    update_interval: never  # ausschliesslich per gestaffelten 53s/59s/61s-Intervallen
+    temperature:
+      id: env_bme680_temp
+      name: "${device_name} Temperature"
+      internal: true
+      oversampling: 8x # 8x Oversampling + IIR-Filter: interne Filterung ausreichend, kein zusaetzlicher EMA-Filter noetig.
+      on_value:
+        then:
+          - lambda: |-
+              if (x > -40.0f && x < 85.0f) {
+                static float ring[3] = {0.0f, 0.0f, 0.0f};
+                static int idx = 0;
+                static int cnt = 0;
+                ring[idx] = x;
+                idx = (idx + 1) % 3;
+                if (cnt < 3) cnt++;
+                float sum = 0.0f;
+                for (int i = 0; i < cnt; i++) sum += ring[i];
+                float avg = sum / (float)cnt;
+                id(env_temp_01c) = (int) lroundf(avg * 10.0f) + atoi("${temp_offset_01c}");
+                id(env_has_temp) = true;
+                id(last_bme_update_ms) = millis();
+                id(bme_fail_count) = 0;
+              } else {
+                ESP_LOGW("bme680", "temp out of range: %.1f (ignored)", x);
+              }
+    humidity:
+      id: env_bme680_hum
+      name: "${device_name} Humidity"
+      internal: true
+      oversampling: 2x # 2x Oversampling + IIR-Filter: interne Filterung ausreichend, kein zusaetzlicher EMA-Filter noetig.
+      on_value:
+        then:
+          - lambda: |-
+              if (x >= 0.0f && x <= 100.0f) {
+                static float ring[3] = {0.0f, 0.0f, 0.0f};
+                static int idx = 0;
+                static int cnt = 0;
+                ring[idx] = x;
+                idx = (idx + 1) % 3;
+                if (cnt < 3) cnt++;
+                float sum = 0.0f;
+                for (int i = 0; i < cnt; i++) sum += ring[i];
+                float avg = sum / (float)cnt;
+                int hum_01pct = (int) lroundf(avg * 10.0f) + atoi("${hum_offset_01pct}");
+                if (hum_01pct < 0) hum_01pct = 0;
+                if (hum_01pct > 1000) hum_01pct = 1000;
+                id(env_hum_01pct) = hum_01pct;
+                id(env_has_hum) = true;
+                id(last_bme_update_ms) = millis();
+                id(bme_fail_count) = 0;
+              } else {
+                ESP_LOGW("bme680", "hum out of range: %.1f (ignored)", x);
+              }
+    pressure:
+      name: "${device_name} Pressure"
+      internal: true
+      oversampling: 4x
+      on_value:
+        then:
+          - lambda: |-
+              if (x > 300.0f && x < 1100.0f) {
+                static float ring[3] = {0.0f, 0.0f, 0.0f};
+                static int idx = 0;
+                static int cnt = 0;
+                ring[idx] = x;
+                idx = (idx + 1) % 3;
+                if (cnt < 3) cnt++;
+                float sum = 0.0f;
+                for (int i = 0; i < cnt; i++) sum += ring[i];
+                float avg = sum / (float)cnt;
+                id(env_pressure_pa) = (uint32_t) lroundf(avg * 100.0f);
+                id(env_has_pressure) = true;
+                id(last_bme_update_ms) = millis();
+                id(bme_fail_count) = 0;
+              } else {
+                ESP_LOGW("bme680", "pressure out of range: %.1f (ignored)", x);
+              }
+    gas_resistance:
+      name: "${device_name} Gas Resistance"
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              if (id(bme680_gas_read_count) < 255) id(bme680_gas_read_count)++; // Zaehler 0-255, manuell geklemmt
+              if (id(bme680_init_ms) > 0 && millis() - id(bme680_init_ms) >= 180000UL && id(bme680_gas_read_count) >= 5 && x > 0) { // 180000 ms = 3 min BME680-Gaswarmup; mind. 5 gueltige Messungen vor Gas-Report
+                id(env_gas_ohm) = (uint32_t) lroundf(x);
+                id(env_has_gas) = true;
+                id(last_bme_update_ms) = millis();
+                id(bme_fail_count) = 0;
+              } else {
+                id(env_gas_ohm) = 4294967295UL; // 0xFFFFFFFF = Sentinel "kein gueltiger Wert"
+                id(env_has_gas) = false;
+              }
+    iir_filter: 3x
+  - platform: veml7700
+    id: env_veml7700_sensor
+    address: ${veml7700_address}
+    update_interval: never  # ausschliesslich per gestaffelten 53s/59s/61s-Intervallen
+    gain: 1X
+    integration_time: 400ms
+    ambient_light:
+      name: "${device_name} Illuminance"
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              static float ring[3] = {0.0f, 0.0f, 0.0f};
+              static int idx = 0;
+              static int cnt = 0;
+              ring[idx] = x;
+              idx = (idx + 1) % 3;
+              if (cnt < 3) cnt++;
+              float sum = 0.0f;
+              for (int i = 0; i < cnt; i++) sum += ring[i];
+              float avg = sum / (float)cnt;
+              id(env_lux) = (int) lroundf(avg);
+              if (id(env_lux) < 0) id(env_lux) = 0;
+              id(env_has_lux) = true;
+              id(last_veml_update_ms) = millis();
+              id(veml_fail_count) = 0;
+              if (!id(relay_1_state)) {
+                id(last_lux_dark) = id(env_lux);
+                id(lux_dark_valid) = true;
+              }
+          - script.execute: evaluate_auto_on_from_lux
+  - platform: ens160_i2c
+    id: env_ens160_component
+    address: ${ens160_address}
+    update_interval: never  # ausschliesslich per gestaffelten 53s/59s/61s-Intervallen
+    compensation:
+      temperature: env_bme680_temp
+      humidity: env_bme680_hum
+    eco2:
+      name: "${device_name} eCO2"
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              if (id(ens160_init_ms) > 0 && millis() - id(ens160_init_ms) >= 1200000UL && x > 0) { // 1200000 ms = 20 min ENS160-Warmup
+                id(env_eco2_ppm) = (int) lroundf(x);
+                id(env_has_eco2) = true;
+                id(last_ens_update_ms) = millis();
+                id(ens_fail_count) = 0;
+              } else {
+                id(env_eco2_ppm) = 65535; // 0xFFFF = Sentinel "kein gueltiger Wert"
+                id(env_has_eco2) = false;
+              }
+    tvoc:
+      name: "${device_name} TVOC"
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              if (id(ens160_init_ms) > 0 && millis() - id(ens160_init_ms) >= 1200000UL && x > 0) { // 1200000 ms = 20 min ENS160-Warmup
+                id(env_tvoc_ppb) = (int) lroundf(x);
+                id(env_has_tvoc) = true;
+                id(last_ens_update_ms) = millis();
+                id(ens_fail_count) = 0;
+              } else {
+                id(env_tvoc_ppb) = 65535; // 0xFFFF = Sentinel "kein gueltiger Wert"
+                id(env_has_tvoc) = false;
+              }
+    aqi:
+      name: "${device_name} AQI"
+      internal: true
+      on_value:
+        then:
+          - lambda: |-
+              if (id(ens160_init_ms) > 0 && millis() - id(ens160_init_ms) >= 1200000UL) { // 1200000 ms = 20 min ENS160-Warmup
+                int raw_aqi = (int) lroundf(x);
+                if (raw_aqi >= 1 && raw_aqi <= 5) {
+                  id(env_aqi) = raw_aqi * 100;
+                  id(env_has_aqi) = true;
+                  id(last_ens_update_ms) = millis();
+                  id(ens_fail_count) = 0;
+                } else {
+                  id(env_aqi) = 65535;
+                  id(env_has_aqi) = false;
+                }
+              } else {
+                id(env_aqi) = 65535;
+                id(env_has_aqi) = false;
+               }
+
+interval:
+  # LED-Ring Comfort-Anzeige: Direkte LED-Kontrolle ohne effects:-Framework
+  # (AddressableLightEffect::start_internal() crasht auf ESP32-C3/2026.5.1)
+  # Animation entspricht der Original-Firmware (netErlDeviceReadPresence / updateRingComfortDisplay)
+  - id: led_ring_interval
+    interval: 120ms
+    then:
+      - lambda: |-
+          auto *output = static_cast<esphome::light::AddressableLight*>(id(led_ring_light).get_output());
+          if (output == nullptr) return;
+          static bool led_logged = false;
+          if (!led_logged) { ESP_LOGI("led_ring", "Interval active, brightness=%d, enabled=%d", (int)id(led_ring_brightness_pct), (int)id(led_ring_enabled)); led_logged = true; }
+          
+          const uint32_t now = millis();
+          static uint32_t last_led_debug_ms = 0;
+          if (now - last_led_debug_ms > 10000UL) {
+            last_led_debug_ms = now;
+            ESP_LOGI("led_ring", "fault=%d enabled=%d display_ms=%d seq_ms=%d lux_dark=%d",
+              (int)id(hardware_fault), (int)id(led_ring_enabled),
+              (int)id(led_ring_display_until_ms), (int)id(led_ring_sequence_started_ms),
+              (int)id(lux_dark_valid));
+          }
+          
+          // hardware_fault alle 120ms neu berechnen (nicht nur in publish_net_erl_led_state)
+          id(hardware_fault) = (millis() < 120000UL) ? false : (!id(env_has_temp) || !id(env_has_hum) || !id(env_has_lux));
+
+          // Brightness-Skalierung analog zur Firmware (ringScale)
+          const uint8_t ringBrightness = (uint8_t) id(led_ring_brightness_pct);
+          auto ringScale = [&](uint8_t value) -> uint8_t {
+            return (uint8_t)(((uint16_t)value * ringBrightness) / 100U);  // pct->0-255
+          };
+          auto ringColor = [&](uint8_t r, uint8_t g, uint8_t b) -> esphome::Color {
+            return esphome::Color(ringScale(r), ringScale(g), ringScale(b));
+          };
+          auto clearAll = [&]() {
+            auto &leds = *output;
+            for (int i = 0; i < leds.size(); i++) leds[i] = esphome::Color(0, 0, 0);
+          };
+          auto setAll = [&](const esphome::Color &c) {
+            auto &leds = *output;
+            for (int i = 0; i < leds.size(); i++) leds[i] = c;
+          };
+          
+          // Ring-Fault: nur rot wenn BME680 T+H fehlen (VEML7700/Lux-Ausfall ignoriert)
+          if (!id(env_has_temp) || !id(env_has_hum)) {
+            setAll(ringColor(255, 0, 0));
+            output->schedule_show();
+            return;
+          }
+          
+          if (!id(led_ring_enabled)) {
+            clearAll();
+            output->schedule_show();
+            return;
+          }
+          
+          // Lux-Blockade-Alert (Firmware: ring_lux_blocked_until_ms)
+          if (id(led_ring_alert_code) != 0 && (int32_t)(id(led_ring_alert_until_ms) - now) > 0) {
+            auto &leds = *output;
+            clearAll();
+            const int head = (now / 120UL) % leds.size();
+            if (id(led_ring_alert_code) == 1) {
+              for (int offset = 0; offset < 4 && offset < leds.size(); offset++) {
+                const int pos = (head + leds.size() - offset) % leds.size();
+                leds[pos] = ringColor(255 - offset * 45, 140 - offset * 25, 0);
+              }
+            } else {
+              const int pulse = 70 + (int)((sinf(now / 120.0f) + 1.0f) * 70.0f);
+              for (int i = 0; i < leds.size(); i++)
+                leds[i] = ringColor(0, pulse, 30);
+            }
+            output->schedule_show();
+            return;
+          }
+          
+          // Display abgelaufen → aus (Firmware: ring_display_until_ms expired)
+          if ((int32_t)(id(led_ring_display_until_ms) - now) <= 0) {
+            clearAll();
+            output->schedule_show();
+            return;
+          }
+          
+          auto &leds = *output;
+          const uint32_t elapsed_s = (now - id(led_ring_sequence_started_ms)) / 1000UL;
+          static const uint32_t aqi_phase_s = (uint32_t) atoi("${led_ring_air_quality_phase_s}");
+          static const uint32_t temp_phase_s = (uint32_t) atoi("${led_ring_temperature_phase_s}");
+          static const uint32_t hum_phase_s = (uint32_t) atoi("${led_ring_humidity_phase_s}");
+          static const uint32_t total_s = aqi_phase_s + temp_phase_s + hum_phase_s;
+          const uint32_t phase_ms = total_s > 0 ? (elapsed_s * 1000UL) % (total_s * 1000UL) : 0UL;
+          
+          // AQI-Phase (Firmware: phaseMs < NET_ERL_LED_RING_AQI_PHASE_MS)
+          if (phase_ms < aqi_phase_s * 1000UL) {
+            auto aqiColor = [&]() -> esphome::Color {
+              const int aqi_val = id(env_aqi);
+              if (aqi_val == 65535) return ringColor(0, 70, 220);  // kein gueltiger Wert
+              if (aqi_val <= 100)   return ringColor(0, 210, 80);   // AQI 1: excellent
+              if (aqi_val <= 200)   return ringColor(180, 190, 0);  // AQI 2: good
+              if (aqi_val <= 300)   return ringColor(255, 115, 0);  // AQI 3: moderate
+              if (aqi_val <= 400)   return ringColor(220, 0, 0);    // AQI 4: poor
+              return ringColor(130, 0, 170);                        // AQI 5: very poor
+            };
+            const float pulse = 0.55f + 0.45f * ((sinf((float)now / 360.0f) + 1.0f) / 2.0f);
+            esphome::Color base = aqiColor();
+            setAll(esphome::Color(
+              (uint8_t)((float)base.r * pulse),
+              (uint8_t)((float)base.g * pulse),
+              (uint8_t)((float)base.b * pulse)
+            ));
+            output->schedule_show();
+            return;
+          }
+          
+          // Temperatur-Phase (Firmware: phaseMs < AQI + TEMP)
+          if (phase_ms < (aqi_phase_s + temp_phase_s) * 1000UL) {
+            clearAll();
+            int temp_01c = id(env_temp_01c);
+            if (temp_01c == -32768) temp_01c = 0;
+            int active = (temp_01c * leds.size()) / 400;
+            if (active < 1 && temp_01c > 0) active = 1;
+            if (active > leds.size()) active = leds.size();
+            const int sweep = (now / 180UL) % leds.size();
+            for (int i = 0; i < active; i++) {
+              const bool highlight = i == sweep || i == ((sweep + leds.size() - 1) % leds.size());
+              leds[i] = ringColor(highlight ? 255 : 150, highlight ? 55 : 12, 0);
+            }
+            output->schedule_show();
+            return;
+          }
+          
+          // Feuchte-Phase (Firmware: letzte Phase)
+          clearAll();
+          int hum_01pct = id(env_hum_01pct);
+          if (hum_01pct == 65535) hum_01pct = 0;
+          int active = (hum_01pct * leds.size()) / 1000;
+          if (active < 1 && hum_01pct > 0) active = 1;
+          if (active > leds.size()) active = leds.size();
+          const int wave = (now / 220UL) % leds.size();
+          for (int i = 0; i < active; i++) {
+            const int distance = abs(i - wave);
+            const bool crest = distance <= 1 || distance >= leds.size() - 1;
+            leds[i] = ringColor(0, crest ? 120 : 35, crest ? 255 : 170);
+          }
+          output->schedule_show();
+
+  - interval: ${presence_poll_interval}
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          static const uint32_t auto_off_ms = (uint32_t) atoi("${auto_off_delay_s}") * 1000UL;
+          const bool presence_high = id(presence_input).state;
+
+          if (!presence_high && id(explicit_off_hold)) {
+            id(explicit_off_hold) = false;
+          }
+
+          if (presence_high) {
+            static uint32_t last_seq_reset_ms = 0;
+            if (now - last_seq_reset_ms >= 30000UL) {
+              // PIR kann dauerhaft HIGH bleiben; ohne neue LOW->HIGH-Flanke feuert on_press nicht erneut.
+              // Daher die Comfort-Sequenz bei anhaltender Praesenz kontrolliert neu starten.
+              id(start_led_ring_comfort_sequence).execute();
+              last_seq_reset_ms = now;
+            }
+            if (!id(explicit_off_hold)) {
+              if (!id(motion_state)) {
+                id(handle_motion_on).execute();
+              } else {
+                id(last_motion_ms) = now;
+                if (id(manual_follow_motion_active)) {
+                  id(manual_follow_motion_seen) = true;
+                  id(manual_follow_motion_probe_active) = false;
+                  id(manual_follow_probe_started_ms) = 0;
+                }
+              }
+            } else {
+              id(motion_state) = true;
+              id(last_motion_ms) = now;
+              // BUG-C: periodische Auto-On-Evaluation (5s Lux-Timeout)
+              if (id(pending_auto_on_decision)) {
+                id(evaluate_auto_on_from_lux).execute();
+              }
+            }
+            return;
+          }
+
+          if (id(manual_follow_motion_active) && !id(manual_follow_motion_seen) && id(relay_1_state)) {
+            if (!id(manual_follow_motion_probe_active)) {
+              if (id(manual_follow_started_ms) > 0 && now - id(manual_follow_started_ms) >= 1800000UL) { // 1800000 ms = 30 min Timeout manuelles Follow
+                id(manual_follow_motion_probe_active) = true;
+                id(manual_follow_probe_started_ms) = now;
+              }
+              return;
+            }
+            if (id(manual_follow_probe_started_ms) > 0 && now - id(manual_follow_probe_started_ms) >= 15000UL) { // 15000 ms = 15 s Probe-Timeout
+              id(manual_follow_motion_active) = false;
+              id(manual_follow_motion_probe_active) = false;
+              id(relay_1_output).turn_off();
+            }
+            return;
+          }
+
+          if (id(motion_state) && id(last_motion_ms) > 0 && now - id(last_motion_ms) >= auto_off_ms) {
+            id(motion_state) = false;
+            id(blocked_by_lux) = false;
+            id(pending_auto_on_decision) = false;
+            if (id(relay_1_state) && id(relay_auto_owned)) {
+              id(relay_auto_owned) = false;
+              id(relay_1_output).turn_off();
+              id(event_type) = 8; id(event_trigger) = 4; id(event_param1) = 1; id(event_param2) = 0;
+              id(flush_device_event).execute();
+            } else if (id(relay_1_state) && id(manual_follow_motion_active) && id(manual_follow_motion_seen)) {
+              id(manual_follow_motion_active) = false;
+              id(manual_follow_motion_seen) = false;
+              id(relay_1_output).turn_off();
+            }
+            id(publish_net_erl_led_state).execute();
+          }
+  - interval: 30s
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          // Staggered I2C polling uses fixed intervals (53s/59s/61s).
+          // Stale-Timeout: 3 full poll cycles + safety margin.
+          // BME680@61s → 183s, VEML7700@53s → 159s, ENS160@59s → 177s.
+          // Rounded to 190s/160s/180s respectively.
+          const uint32_t bme_timeout  = 190000UL; // BME680 + VEML7700
+          const uint32_t ens_timeout  = 180000UL; // ENS160
+          bool state_changed = false;
+
+          // BME680 stale check (alle Sub-Sensorwerte zuruecksetzen).
+          if (id(last_bme_update_ms) > 0 && (now - id(last_bme_update_ms)) >= bme_timeout) {
+            if (id(env_has_temp) || id(env_has_hum) || id(env_has_pressure) || id(env_has_gas)) {
+              id(env_has_temp) = false;
+              id(env_has_hum) = false;
+              id(env_has_pressure) = false;
+              id(env_has_gas) = false;
+              id(env_temp_01c) = -32768;
+              id(env_hum_01pct) = 65535;
+              id(env_pressure_pa) = 4294967295UL;
+              id(env_gas_ohm) = 4294967295UL;
+              if (id(bme_fail_count) < 255) id(bme_fail_count)++;
+              if (id(bme680_gas_read_count) > 0) id(bme680_gas_read_count) = 0;
+              id(event_type) = 15;
+              id(event_trigger) = 3;
+              id(event_param1) = 1;
+              id(event_param2) = id(bme_fail_count);
+              id(flush_device_event).execute();
+              state_changed = true;
+            }
+          }
+
+          // VEML7700 stale check.
+          if (id(last_veml_update_ms) > 0 && (now - id(last_veml_update_ms)) >= bme_timeout) {
+            if (id(env_has_lux)) {
+              id(env_has_lux) = false;
+              id(env_lux) = 65535;
+              id(lux_dark_valid) = false;
+              if (id(veml_fail_count) < 255) id(veml_fail_count)++;
+              id(event_type) = 15;
+              id(event_trigger) = 3;
+              id(event_param1) = 2;
+              id(event_param2) = id(veml_fail_count);
+              id(flush_device_event).execute();
+              state_changed = true;
+            }
+          }
+
+          // ENS160 stale check (alle drei ENS-Werte zuruecksetzen).
+          if (id(last_ens_update_ms) > 0 && (now - id(last_ens_update_ms)) >= ens_timeout) {
+            if (id(env_has_aqi) || id(env_has_eco2) || id(env_has_tvoc)) {
+              id(env_has_aqi) = false;
+              id(env_has_eco2) = false;
+              id(env_has_tvoc) = false;
+              id(env_aqi) = 65535;
+              id(env_eco2_ppm) = 65535;
+              id(env_tvoc_ppb) = 65535;
+              if (id(ens_fail_count) < 255) id(ens_fail_count)++;
+              id(event_type) = 15;
+              id(event_trigger) = 3;
+              id(event_param1) = 3;
+              id(event_param2) = id(ens_fail_count);
+              id(flush_device_event).execute();
+              state_changed = true;
+            }
+          }
+
+          if (state_changed) {
+            id(publish_net_erl_led_state).execute();
+          }
+  # I2C-Robustheit: gestaffelte Sensor-Poll-Intervalle (prime numbers, Minutenbereich).
+  # BME680 (61s), VEML7700 (53s), ENS160 (59s) haben update_interval: never und
+  # werden ausschliesslich hier getriggert. LCM(53,59,61) ≈ 53 h → erste Kollision
+  # erst nach ~2 Tagen Dauerbetrieb. Jeder Sensor hat garantiert exklusiven
+  # Buszugriff (+50ms Margin) waehrend seiner Transaktion.
+  #
+  # Poll-Reihenfolge: VEML (53s) → ENS (59s) → BME (61s)
+  # ENS160-Update wird nur ausgeloest, wenn BME680 valide T/H-Werte geliefert hat
+  # (compensation-Block nutzt sonst NAN/0.0 → unkompensierte ENS160-Messungen).
+  - interval: 53s
+    then:
+      - component.update: env_veml7700_sensor
+      # BUG-011: VEML7700 Recovery — nach erfolgreichem Read wird fail_count=0 gesetzt.
+      # Falls VEML länger als 180s stale war, wird der Sensor hier beim nächsten
+      # Poll automatisch re-primed (component.update feuert erneut).
+  - interval: 59s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              // ENS160 compensation: nur updaten, wenn BME680 frische T/H-Werte hat.
+              // Check: BME680 wurde in den letzten 120s erfolgreich gelesen
+              // (2x BME-Poll-Intervall = Sicherheitsmarge).
+              return id(env_has_temp) && id(env_has_hum) &&
+                     id(last_bme_update_ms) > 0 &&
+                     (millis() - id(last_bme_update_ms)) < 120000UL;
+          then:
+            - component.update: env_ens160_component
+          else:
+            - logger.log: 'ENS160: compensation skipped (BME680 T/H stale or missing)'
+  - interval: 61s
+    then:
+      - component.update: env_bme680_component
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              static uint32_t last_status_publish_ms = 0;
+              const uint32_t now = millis();
+              const uint32_t max_interval_ms = (uint32_t) id(setup_status_interval_number).state * 1000UL;
+              bool pub = false;
+
+              if (id(env_has_temp)) {
+                int d = id(env_temp_01c) - id(last_pub_temp_01c);
+                if (d < 0) d = -d;
+                if (id(last_pub_temp_01c) == -32768 || d >= 5) pub = true;
+              }
+              if (id(env_has_hum)) {
+                int d = id(env_hum_01pct) - id(last_pub_hum_01pct);
+                if (d < 0) d = -d;
+                if (id(last_pub_hum_01pct) == 65535 || d >= 10) pub = true;
+              }
+              if (id(env_has_pressure)) {
+                if (id(last_pub_pressure_pa) == 4294967295UL) pub = true;
+                else {
+                  uint32_t dp = id(env_pressure_pa) > id(last_pub_pressure_pa) ?
+                    id(env_pressure_pa) - id(last_pub_pressure_pa) :
+                    id(last_pub_pressure_pa) - id(env_pressure_pa);
+                  if (dp >= 50) pub = true;
+                }
+              }
+              if (id(env_has_lux) && id(lux_dark_valid) && !id(relay_1_state)) {
+                int d = id(env_lux) - id(last_pub_lux);
+                if (d < 0) d = -d;
+                if (id(last_pub_lux) == 65535 || d >= 20) pub = true;
+              }
+              if (!id(lux_dark_valid) && id(env_has_lux)) pub = true;
+              if (id(env_has_gas)) {
+                if (id(last_pub_gas_ohm) == 4294967295UL) pub = true;
+                else {
+                  uint32_t dg = id(env_gas_ohm) > id(last_pub_gas_ohm) ?
+                    id(env_gas_ohm) - id(last_pub_gas_ohm) :
+                    id(last_pub_gas_ohm) - id(env_gas_ohm);
+                  if (dg >= 2000) pub = true;
+                }
+              }
+              if (id(env_has_aqi)) {
+                int d = id(env_aqi) - id(last_pub_aqi);
+                if (d < 0) d = -d;
+                if (id(last_pub_aqi) == 65535 || d >= 100) pub = true;
+              }
+              if (id(env_has_eco2)) {
+                int d = id(env_eco2_ppm) - id(last_pub_eco2_ppm);
+                if (d < 0) d = -d;
+                if (id(last_pub_eco2_ppm) == 65535 || d >= 200) pub = true;
+              }
+              if (id(env_has_tvoc)) {
+                int d = id(env_tvoc_ppb) - id(last_pub_tvoc_ppb);
+                if (d < 0) d = -d;
+                if (id(last_pub_tvoc_ppb) == 65535 || d >= 50) pub = true;
+              }
+
+              if (last_status_publish_ms == 0 || now - last_status_publish_ms >= max_interval_ms) pub = true;
+
+              if (pub) last_status_publish_ms = now;
+              return pub;
+          then:
+            - script.execute: publish_net_erl_led_state
+  - interval: 5min
+    then:
+      - script.execute: publish_contract_meta
+      - script.execute: publish_contract_availability
+      - script.execute: publish_net_erl_led_state
