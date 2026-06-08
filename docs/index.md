@@ -5,78 +5,62 @@ title: ESP32 Smart Home
 
 # ESP32 Smart Home
 
-This is the public project page for the cleaned English release of the repository.
+This is the public landing page for the repository.
 
-The project shows a local, modular ESP32-based smart home system. It is meant for readers who want to understand how sensors, actuators, wireless transport, server logic, dashboarding, and verification can be combined into one controlled project.
+The project has two separate technical tracks:
 
-## What it is
-
-The system is built from:
-
-- ESP32 devices for sensing and actuation
-- a local server stack with MQTT ingest, a Node-RED dashboard, and SQLite snapshots
-- clear device contracts for `meta`, `availability`, `state`, `event`, `ack`, and `command`
-- traceable tests and notes instead of architecture claims without proof
-
-There are two usable firmware lines:
-
-| Line | Summary | Best for |
+| Track | Purpose | Core path |
 |---|---|---|
-| Custom firmware (main line) | ESP-NOW between devices and master, MQTT only between master and server | full control, custom transport, core project line |
-| ESPHome alternative | devices speak directly to the same MQTT contract | Home Assistant users and YAML-first workflows |
+| Custom firmware | Full project architecture | ESP-NOW -> Master -> MQTT -> local server |
+| ESPHome | Simple Home Assistant adoption | ESPHome API -> Home Assistant |
 
-The shared point is the server contract. Node-RED should see the same logical device state regardless of whether a device comes from the custom firmware line or from ESPHome.
+That separation matters. ESPHome is not the same runtime stack rewritten in YAML. It is the easier path for people who want simple devices that fit naturally into Home Assistant.
 
-## Current technical line
+## What the repository contains
 
-The official main line stays intentionally narrow:
+- custom ESP32-C3 hardware
+- a custom firmware stack with ESP-NOW and a master bridge
+- a local server stack with Mosquitto, Node-RED, and SQLite
+- a separate ESPHome track for Home Assistant users
+- enclosure and fabrication assets
+- validation scripts and notes
 
-- ESP-NOW between distributed devices and master
-- MQTT between master and server
-- the master as the bridge for the custom firmware line
-- Node-RED as the current server and visualization core
-- base types instead of uncontrolled one-off behavior
+## Current ESPHome direction
 
-The ESPHome line is a deliberately separate alternative. It does not use an ESP-NOW master. It uses direct MQTT, but stays compatible with the topic and payload contract.
+The supported public ESPHome direction is Home Assistant-native and intentionally independent from the custom firmware architecture.
 
-## Public documentation
+Supported current configs:
 
-The English public docs now live in the main `docs/` entry points. Legacy German reference material has been moved to `docs/archive/german-reference/`.
+- `NET-ERL-010` hall module
+- `NET-ERL-020` hall module with LED ring
+- `NET-SEN-020` weather station
+- `NET-ZRL-020` shutter module
 
-## Confirmed public state
+Some older ESPHome MQTT-contract files still remain in the repo as migration references. They are valid transitional material, not the main public story.
 
-The current public state already shows a stable line of the server core and concrete real device paths.
+## Current custom firmware direction
 
-Visible and verified:
+The custom firmware remains the core architecture for the full project:
 
-- MQTT ingest for devices and master
-- shared device state model
-- minimal SQLite foundation
-- dashboard V1 baseline
-- `net_zrl_shutter_module` as the shutter path
-- working `net_erl_hall_module`
-- prepared `net_erl_hall_module_led_ring`
-- confirmed setup path for the hall module
-- working `net_sen_weather_station`
-- confirmed setup path for `net_sen`
-- prepared ESPHome YAMLs for `net_erl`, `net_sen`, `net_zrl`, and `bat_sen`
-- real verification notes in the archive
+- ESP-NOW between devices and the master
+- MQTT between the master and the server
+- Node-RED as the current dashboard and automation layer
+- hardware-specific device firmware built on shared base types
 
-Important:
-This is **not** a finished product platform. It is a controlled, documented project state. The custom firmware line is the architectural main line; ESPHome is the practical alternative for users who want the same server contract but prefer to build devices through Home Assistant / ESPHome.
-
-## Repo areas
+## Read the right thing
 
 - [Documentation](../docs/README.md)
 - [Firmware](../firmware/README.md)
-- [ESPHome alternative](../esphome/README.md)
+- [ESPHome](../esphome/README.md)
 - [Server](../server/README.md)
 - [Hardware](../hardware/README.md)
 - [Tests](../tests/README.md)
 - [Archive](../docs/archive/README.md)
 
-## Notes
+## Reality check
 
-- The public repo stays technically direct and system-neutral.
-- Internal or private working states do not belong here.
-- Small, traceable steps matter more than broad uncontrolled refactors.
+This repository is a documented project state, not a polished product platform.
+
+If you want the original full architecture, use `firmware/`.
+
+If you want the easier Home Assistant path, use `esphome/`.

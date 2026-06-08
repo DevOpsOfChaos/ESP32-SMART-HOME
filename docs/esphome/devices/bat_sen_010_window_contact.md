@@ -1,128 +1,50 @@
-# bat_sen_010 – Window Contact (ESPHome)
+# bat_sen_010 Window Contact
 
-## 1. Übersicht
+## Status
 
-**ESPHome-ID:** `bat_sen_010`
-**Typ:** Batteriebetrieb (battery)
-**Hardware:** ESP32-C3 (esp32-c3-devkitm-1)
-**Device-Class:** `bat_sen`
-**Sensor:** Reed-Kontakt (Fenster offen/geschlossen), Batterie-ADC
-**Kommunikation:** MQTT direkt, Deep-Sleep
+This file is a legacy ESPHome migration reference.
 
-## 2. Hardware
+It is still valid, but it does not match the newer Home Assistant-native direction used by the current `net_*` ESPHome configs. It still uses the older MQTT-contract helper packages and deep-sleep reporting model.
 
-| Komponente | GPIO | Funktion |
-|-----------|------|----------|
-| Reed-Kontakt | GPIO3 | Fenster offen/geschlossen (Pull-Up) |
-| Setup-Taster | GPIO2 | Setup-Modus (5 s halten) |
-| Batterie-ADC | GPIO4 | Spannungsmessung (12 dB Dämpfung) |
+## Overview
 
-## 3. Konfiguration (YAML-Substitutions)
+`bat_sen_010` is a battery-powered window contact with:
 
-```yaml
-node_name: bat-sen-010
-device_id: "bat_sen_010"
-device_name: "BAT-SEN Window"
-device_class: bat_sen
-power_type: battery
-fw_version: "1"
-caps: "640"                          # BATTERY(512)|WINDOW(128)
-control_mode: none
-config_profile: none
-reporting_mode: sleep_event
-sensor_mask: "WXXXXXXXXX"
-input_mask: "XXXXX"
-setup_ap_password: bat-sen-setup
-setup_status_default: "900"          # 15 min Wake-Intervall
-setup_sensor_default: "5000"         # 5 s RX-Fenster
-setup_status_min: "30"
-setup_status_max: "65535"
-setup_sensor_min: "500"
-setup_sensor_max: "60000"
-contact_pin: GPIO3
-battery_pin: GPIO4
-setup_button_pin: GPIO2
-rx_window_ms: "5000"
-```
+- reed contact input
+- battery voltage reporting
+- deep sleep
+- MQTT-based state publishing
 
-## 4. Deep-Sleep-Zyklus
+## Hardware Mapping
 
-```
-Wake (Timer oder GPIO-Interrupt)
-  ├── Sensoren lesen (Reed + Battery-ADC)
-  ├── WiFi verbinden (fast_connect, power_save_mode: LIGHT)
-  ├── MQTT verbinden (Birth/Will)
-  ├── on_connect: Meta + Availability + State publizieren
-  ├── State + Event publizieren (wenn Fensterzustand geändert)
-  ├── RX-Fenster (5 s): auf Kommandos warten
-  └── Deep-Sleep (900 s)
-```
+| Component | Pin | Notes |
+|---|---|---|
+| Reed contact | `GPIO3` | wake source and window state input |
+| Setup button | `GPIO2` | manual setup / wake handling |
+| Battery ADC | `GPIO4` | voltage measurement |
 
-**Wake-Quellen:**
-- Timer: 900 s Intervall
-- Reed-Kontakt GPIO3 (INVERT_WAKEUP): Wake bei Zustandswechsel
-- Setup-Taster GPIO2 (manuell)
+## Runtime Model
 
-**Deep-Sleep-Parameter:**
-- `run_duration`: `${rx_window_ms}ms` (5.000 ms)
-- `sleep_duration`: 900 s (15 min)
-- `wakeup_pin`: GPIO3 (contact_pin), `INVERT_WAKEUP`
+Typical wake cycle:
 
-## 5. MQTT-Topics
+1. Wake by timer or contact change.
+2. Read reed contact and battery voltage.
+3. Connect to Wi-Fi and MQTT.
+4. Publish availability, meta, state, and any event.
+5. Keep a short receive window open for commands.
+6. Return to deep sleep.
 
-| Topic | Retain | Beschreibung |
-|-------|:------:|-------------|
-| `smarthome/device/bat_sen_010/meta` | ✅ | Metadaten |
-| `smarthome/device/bat_sen_010/availability` | ✅ | Online/Offline |
-| `smarthome/device/bat_sen_010/state` | ✅ | Batterie + Fensterzustand |
-| `smarthome/device/bat_sen_010/event` | ❌ | window_opened / window_closed |
-| `smarthome/device/bat_sen_010/command` | — | get_state, set_config |
-| `smarthome/device/bat_sen_010/ack` | ❌ | Kommando-Bestätigung |
+## Current Behavior
 
-**Hinweis:** `on_connect` publiziert Meta, Availability und State erneut, da `on_boot` vor der MQTT-Verbindung feuert.
+- sleep interval default: `900 s`
+- receive window default: `5000 ms`
+- contact changes can wake the device
+- battery percentage is derived from the measured voltage
 
-## 6. State-Payload
+## Current ESPHome File
 
-```json
-{
-  "device_id": "bat_sen_010",
-  "battery_pct": 85,
-  "battery_mv": 2900,
-  "window_open": 0,
-  "rain_raw": null,
-  "button_flags": 0,
-  "fault": false
-}
-```
+- [bat_sen_window_contact.yaml](D:/LocalRepos/esp32-smart-home/esphome/devices/bat_sen_window_contact.yaml)
 
-**window_open:** Integer 0/1 (nicht bool), wie Firmware-Protokoll.
+## Important Note
 
-## 7. Batterie
-
-- **ADC**: GPIO4, 12 dB Dämpfung (Messbereich 0–3,3 V)
-- **ADC-Poll**: 1 s (während Run-Duration)
-- **Spannungsteiler**: 1:1 (Faktor 2), Kalibrierfaktor 1,078
-- **CR2032-Profil**: 2200 mV (leer) – 3000 mV (voll)
-- **Berechnung**: `pct = (mv - 2200) * 100 / (3000 - 2200)`, clamped auf 0–100
-
-## 8. Events
-
-| Event | event_type | trigger | Bedingung |
-|-------|-----------|---------|-----------|
-| `window_opened` | 3 | auto (3) | Reed-Kontakt schließt |
-| `window_closed` | 4 | auto (3) | Reed-Kontakt öffnet |
-| `node_boot` | — | — | Wake aus Deep-Sleep (on_boot) |
-
-## 9. Fault-Erkennung
-
-- **hardware_fault**: immer `false` (keine diagnostischen Sensoren)
-- **contract_fault**: `true` bei Kommando-Fehlern
-- `battery_pct`/`battery_mv`: `null` wenn `battery_has_value == false`
-
-## 10. Setup-Taster
-
-- **GPIO**: GPIO2, kein Pull-Up/Down
-- **Entprellzeit**: 35 ms
-- **5 Sekunden halten**: Aktiviert Setup-Portal (WiFi-AP, SSID = `bat-sen-010-setup`)
-- **Setup-Passwort**: `bat-sen-setup`
-- **Deep-Sleep-Prevent**: Solange Taster gehalten, kein Sleep
+This device is kept in the repo as a migration reference. If you want the current simpler public ESPHome direction, start with the `net_*` configs instead.

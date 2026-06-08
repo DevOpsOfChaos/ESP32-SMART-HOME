@@ -8,6 +8,7 @@ This release converts the project into a cleaner public-facing repository.
 
 - root documentation rewritten in English
 - hardware, firmware, server, and ESPHome entry points cleaned up
+- ESPHome presentation rebuilt around a separate Home Assistant-oriented track instead of a firmware-coupled story
 - device-specific readmes translated where they matter for reuse
 - legacy German reference material moved into `docs/archive/`
 - public repo structure clarified around independently usable modules
@@ -32,4 +33,3 @@ This release converts the project into a cleaner public-facing repository.
 ### Suggested first commit message
 
 `chore: prepare public English release of ESP32 smart home project`
-

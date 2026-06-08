@@ -1,6 +1,6 @@
-title: smarthome-technikerprojekt
-description: Öffentliches Smart-Home-Technikerprojekt mit ESP-NOW, Master-Bridge und Node-RED-Server.
-lang: de
+title: esp32-smart-home
+description: Public ESP32 smart home project with separate custom firmware and ESPHome tracks.
+lang: en
 baseurl: "/smarthome-technikerprojekt"
 url: "https://devopsofchaos.github.io"
 theme: minima

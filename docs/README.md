@@ -15,6 +15,7 @@ This is the English documentation entry point for the public release.
 
 - public overview material
 - subsystem reference pages
+- a clear split between the custom firmware track and the separate ESPHome track
 - an archive area for the original German reference material
 
 ## Archive

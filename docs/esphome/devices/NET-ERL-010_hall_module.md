@@ -1,144 +1,125 @@
-# NET-ERL-010 – Hall Module (ESPHome)
+# NET-ERL-010 Hall Module
 
-## 1. Übersicht
+## Overview
 
-**ESPHome-ID:** `NET-ERL-010`
-**Typ:** Netzbetrieb (mains)
-**Hardware:** ESP32-C3 (esp32-c3-devkitm-1)
-**Device-Class:** `net_erl`
-**Sensoren:** BME280 (Temp, Feuchte), VEML7700 (Lux), PIR (Bewegung)
-**Aktor:** 1 Relais (Schaltausgang)
-**Kommunikation:** MQTT direkt (kein ESP-NOW-Master)
+`NET-ERL-010` is a plain ESPHome hall-light controller for Home Assistant.
 
-## 2. Hardware
+The device keeps the actual motion-light logic locally on the ESP, so it still works even if Home Assistant is temporarily unavailable. Home Assistant is used to view the entities and change the configuration values.
 
-| Komponente | Typ | GPIO | Adresse |
-|-----------|-----|------|---------|
-| BME280 | I2C | SDA=GPIO0, SCL=GPIO1 | 0x76 |
-| VEML7700 | I2C | SDA=GPIO0, SCL=GPIO1 | 0x10 |
-| PIR (Bewegung) | GPIO | GPIO7 | — |
-| Relais | GPIO | GPIO10 | — |
-| Setup-Taster | GPIO | GPIO2 | — |
+## Current Features
 
-## 3. Konfiguration (YAML-Substitutions)
+- One relay exposed as a light
+- One PIR motion sensor
+- One VEML7700 illuminance sensor
+- Local automatic switch-on when motion is detected and the lux value is below the configured threshold
+- Local automatic switch-off after the configured delay once motion ends
+- Home Assistant entities for changing the automation settings
+- Lux polling only while the light is off, to avoid pointless self-illumination readings
 
-```yaml
-node_name: net-erl-010
-device_id: "NET-ERL-010"
-device_name: "NET-ERL Hall Module"
-device_class: net_erl
-power_type: mains
-fw_version: "1"
-caps: "93"                      # RELAY(1)|TEMP(4)|HUM(8)|LUX(16)|MOTION(64)
-control_mode: relay_light
-config_profile: hall_light
-reporting_mode: hybrid
-sensor_mask: "THLMXXXXXX"       # Temp, Hum, Lux, Motion
-input_mask: "XXXXX"
-setup_status_default: "10"      # Status-Intervall: 10 s
-setup_sensor_default: "10"
-setup_ap_password: net-erl-setup
-relay_pin: GPIO10
-pir_pin: GPIO7
-setup_button_pin: GPIO2
-i2c_sda_pin: GPIO0
-i2c_scl_pin: GPIO1
-bme280_address: "0x76"
-veml7700_address: "0x10"
-temp_offset_01c: "0"
-hum_offset_01pct: "0"
-```
+Temperature and humidity are intentionally not part of this device anymore.
 
-## 4. Sensoren
+## Exposed Entities
 
-### 4.1 BME280 (Temperatur, Feuchte)
-- **I2C-Adresse**: 0x76
-- **Poll-Intervall**: 60 s
-- **Oversampling**: 16× (Temperatur + Feuchte)
-- **Kein Druck-Reporting**: `pressure_pa` im State-Payload ist immer `null`
+After flashing and adopting the device, Home Assistant should show entities similar to these:
 
-### 4.2 VEML7700 (Helligkeit)
-- **I2C-Adresse**: 0x10
-- **Poll-Intervall**: 60 s
+- `light.net_erl_hall_module_light`
+- `binary_sensor.net_erl_hall_module_motion`
+- `sensor.net_erl_hall_module_illuminance`
+- `switch.net_erl_hall_module_auto_light`
+- `number.net_erl_hall_module_lux_threshold`
+- `number.net_erl_hall_module_auto_off_delay`
 
-### 4.3 PIR (Bewegung)
-- **GPIO**: GPIO7
-- **Kein Pull-Up/Down**
-- **Entprellzeit**: 35 ms (delayed_on / delayed_off)
-- **Event**: `motion_detected` bei Zustandswechsel (event_type=2)
+Entity IDs can differ slightly depending on your naming conventions in Home Assistant.
 
-## 5. Relais
-- **GPIO**: GPIO10
-- **Restore-Mode**: RESTORE_DEFAULT_OFF
-- **Steuerung**: per MQTT-Kommando `set_relay`
-- **Event**: `relay_changed` bei Schaltvorgang (event_type=6, trigger=2)
-- **Kein Auto-Light**: Relais wird manuell oder per Server-Kommando geschaltet; `auto_flags` immer `0`
+## Hardware Mapping
 
-## 6. MQTT-Topics
+| Component | Pin / Bus | Notes |
+| --- | --- | --- |
+| Relay | `GPIO10` | Exposed as a light |
+| PIR motion sensor | `GPIO7` | Exposed as a motion binary sensor |
+| VEML7700 | `I2C`, `SDA=GPIO0`, `SCL=GPIO1`, `0x10` | Exposed as illuminance, polled only while light is off |
 
-| Topic | Retain | Beschreibung |
-|-------|:------:|-------------|
-| `smarthome/device/NET-ERL-010/meta` | ✅ | Metadaten (Caps, Version, MAC) |
-| `smarthome/device/NET-ERL-010/availability` | ✅ | Online/Offline |
-| `smarthome/device/NET-ERL-010/state` | ✅ | Sensordaten + Relais-Zustand |
-| `smarthome/device/NET-ERL-010/event` | ❌ | Events (motion, relay) |
-| `smarthome/device/NET-ERL-010/ack` | ❌ | Kommando-Bestätigung |
-| `smarthome/device/NET-ERL-010/command` | — | Kommandos (get_state, set_relay, set_config) |
+## Automation Behavior
 
-## 7. State-Payload
+The local device logic works like this:
 
-```json
-{
-  "device_id": "NET-ERL-010",
-  "relay_1": false,
-  "temp_01c": 225,
-  "hum_01pct": 480,
-  "lux": 320,
-  "pressure_pa": null,
-  "gas_ohm": null,
-  "aqi": null,
-  "tvoc_ppb": null,
-  "eco2_ppm": null,
-  "motion": false,
-  "auto_flags": 0,
-  "report_interval_s": 10,
-  "auto_on_lux_threshold": null,
-  "fault": false
-}
-```
+1. Motion goes `on`
+2. The device checks whether auto-light is enabled
+3. The device checks whether the VEML7700 has a valid lux reading
+4. The device compares the current lux value against the configured threshold
+5. If the measured lux is at or below the threshold and the light is currently off, the relay turns on
+6. When motion goes `off`, the device starts an internal off-timer
+7. If motion is detected again before the timer expires, the timer is cancelled
+8. If the timer expires and motion is still off, the light turns off
 
-**Null-Werte**: `pressure_pa`, `gas_ohm`, `aqi`, `tvoc_ppb`, `eco2_ppm`, `auto_on_lux_threshold` sind immer `null` (Sensoren nicht vorhanden).
+The VEML7700 is not continuously polled. It is updated once per minute and only while the light is off. That avoids wasting reads and avoids using obviously contaminated lux values caused by the lamp itself.
 
-## 8. Events
+This means the basic automation does not depend on a live Home Assistant connection.
 
-| Event | event_type | trigger | Bedingung |
-|-------|-----------|---------|-----------|
-| `motion_detected` | 2 | auto (3) | PIR wechselt Zustand |
-| `relay_changed` | 6 | master_cmd (2) | Relais per MQTT-Kommando geschaltet |
-| `node_boot` | — | — | Gerät startet (on_boot) |
+## Configurable Values
 
-## 9. Setup-Taster
+These settings are exposed to Home Assistant as normal entities:
 
-- **GPIO**: GPIO2, inverted, Pull-Up
-- **Entprellzeit**: 35 ms
-- **5 Sekunden halten**: Aktiviert Setup-Portal (WiFi-AP, SSID = `net-erl-010-setup`)
-- **Setup-Passwort**: `net-erl-setup`
+### Auto Light
 
-## 10. Sensor-Offset
+- Entity: `switch.net_erl_hall_module_auto_light`
+- Type: on/off
+- Purpose: enables or disables the local automation
 
-- `temp_offset_01c`: Temperatur-Korrektur in Zehntelgrad (negativ = nach unten)
-- `hum_offset_01pct`: Feuchte-Korrektur in Zehntelprozent
-- Offset wird NACH Sensor-Konvertierung, VOR State-Publish angewendet
+If disabled, the device stops doing automatic on/off control. The light can still be switched manually from Home Assistant.
 
-## 11. Fault-Erkennung
+### Lux Threshold
 
-- **hardware_fault**: `true` wenn `!env_has_temp || !env_has_hum || !env_has_lux` (BME280 oder VEML7700 nie erreicht)
-- **contract_fault**: `true` bei Kommando-Verarbeitungsfehlern
-- **State-JSON `fault`**: `hardware_fault || contract_fault`
-- **Design-Limit**: `env_has_*`-Flags sind Einweg-Latches; Sensorausfall NACH Erstkontakt wird nicht erkannt
+- Entity: `number.net_erl_hall_module_lux_threshold`
+- Unit: `lx`
+- Default: `80`
+- Range: `0` to `1000`
 
-## 12. Intervalle
+The light only turns on automatically if the measured illuminance is less than or equal to this value.
 
-- **State-Publish**: alle `${setup_status_default}`s (10 s)
-- **Periodischer Refresh**: alle 5 min (Meta, Availability, State)
-- **Sensor-Poll**: 60 s (BME280, VEML7700)
+### Auto Off Delay
+
+- Entity: `number.net_erl_hall_module_auto_off_delay`
+- Unit: `s`
+- Default: `120`
+- Range: `10` to `1800`
+
+This is the run-on time after motion ends.
+
+## Important Behavior Details
+
+### Manual Light Control
+
+If the light is turned on manually while auto-light is enabled, the device does not automatically assume that this was an automation-triggered light cycle. Auto-off is only applied to light cycles that were started automatically by the device.
+
+That is intentional. Otherwise the automation would interfere with manual control too aggressively.
+
+### No Fallback Access Point
+
+The current configuration does not use an ESPHome fallback AP or `captive_portal`.
+
+That keeps the device simpler, but it also means:
+
+- if Wi-Fi credentials are wrong
+- or the WLAN environment changes badly
+
+you do not have a built-in wireless recovery path. In that case you need to reflash or recover the device another way.
+
+## Current ESPHome File
+
+The live device configuration is:
+
+- [net_erl_hall_module.yaml](D:/LocalRepos/esp32-smart-home/esphome/devices/net_erl_hall_module.yaml)
+
+## Verification Checklist
+
+Do not trust assumptions. Verify the real behavior:
+
+1. Confirm the device appears online in Home Assistant.
+2. Confirm the motion entity switches between `off` and `on`.
+3. Confirm the illuminance sensor reports plausible values.
+4. Set the lux threshold high enough to force an automatic switch-on test.
+5. Trigger motion and confirm the light turns on locally.
+6. Stop moving and confirm the light turns off after the configured delay.
+7. Trigger motion again during the delay and confirm the timer is cancelled.
+8. Turn the light on manually and confirm that manual control is not unexpectedly forced back off by an unrelated old timer.

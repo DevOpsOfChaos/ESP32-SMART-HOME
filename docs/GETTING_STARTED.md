@@ -5,7 +5,7 @@ This is the shortest useful path for a first-time user.
 ## 1. Pick your entry point
 
 - `firmware/` if you want the custom ESP-NOW + MQTT line
-- `esphome/` if you want the Home Assistant-friendly MQTT line
+- `esphome/` if you want the separate Home Assistant-oriented ESPHome line
 - `server/` if you want the local MQTT / Node-RED / SQLite stack
 - `hardware/` if you want the PCB and enclosure work
 
@@ -32,7 +32,11 @@ http://localhost:1880/ui
 
 ## 4. Decide whether you want custom firmware or ESPHome
 
-Use the custom firmware if you want the original project architecture. Use ESPHome if you want a simpler Home Assistant workflow and direct MQTT.
+Use the custom firmware if you want the original project architecture with ESP-NOW, a master bridge, and the local server contract.
+
+Use ESPHome if you want simpler Home Assistant-native devices and do not want to adopt the custom firmware architecture.
+
+Do not blur the two. They share hardware ideas, not one runtime stack.
 
 ## 5. Read only what you need
 
@@ -41,4 +45,3 @@ Use the custom firmware if you want the original project architecture. Use ESPHo
 - [Firmware overview](../firmware/README.md)
 - [Server overview](../server/README.md)
 - [ESPHome overview](../esphome/README.md)
-

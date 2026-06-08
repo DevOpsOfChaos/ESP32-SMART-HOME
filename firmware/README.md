@@ -17,15 +17,11 @@ It is the main code path for the project when you want the full custom stack:
 - `lib/` contains protocol, provisioning, and storage helpers
 - `scripts/` contains build helpers
 
-## Two firmware approaches
+## Use this track when
 
-### Custom firmware
+Use `firmware/` if you want full control over timing, provisioning, transport, and the device model.
 
-Use this if you want full control over timing, provisioning, transport, and the device model.
-
-### ESPHome
-
-If you mainly want Home Assistant compatibility, use the `esphome/` folder instead. That line is separate on purpose and does not depend on the custom bridge.
+If you mainly want simpler Home Assistant devices, use the separate `esphome/` folder instead. That is not another variant of this firmware stack. It is its own track.
 
 ## Build
 
