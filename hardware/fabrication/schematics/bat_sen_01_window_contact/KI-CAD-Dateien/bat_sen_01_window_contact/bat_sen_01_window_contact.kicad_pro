@@ -493,7 +493,7 @@
     },
     "net_format_name": "",
     "page_layout_descr_file": "",
-    "plot_directory": "D:/LocalRepos/smarthome-technikerprojekt-private/Abgabeordner/03_Hardware/Schaltplaene_KiCad_Geraete/bat_sen_01_window_contact/Schaltpläne-und-Bilder/",
+    "plot_directory": "./",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
     "spice_external_command": "spice \"%I\"",

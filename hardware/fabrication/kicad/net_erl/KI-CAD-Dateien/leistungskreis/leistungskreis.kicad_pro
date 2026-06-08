@@ -706,7 +706,7 @@
     },
     "net_format_name": "",
     "page_layout_descr_file": "",
-    "plot_directory": "D:/LocalRepos/smarthome-technikerprojekt-private/Abgabeordner/03_Hardware/Platinen_KiCad/net_erl/Schaltplaene_und_Bilder/",
+    "plot_directory": "./",
     "space_save_all_events": true,
     "spice_current_sheet_as_root": false,
     "spice_external_command": "spice \"%I\"",
