@@ -1092,11 +1092,11 @@ lib_deps =
     const toDE = body.classList.contains('lang-en');
     body.classList.toggle('lang-de', toDE);
     body.classList.toggle('lang-en', !toDE);
-    // Re-render wizard in new language
-    const result = document.getElementById('wiz-result');
-    if (result && result.style.display !== 'none') {
+    // Re-render wizard in new language using answer count, not element style
+    const lang = toDE ? 'de' : 'en';
+    if (wizAnswers.length >= QUESTIONS[lang].length) {
       showResult();
-    } else if (document.getElementById('wiz-questions').style.display !== 'none') {
+    } else {
       renderQuestion();
     }
   }
@@ -1300,4 +1300,12 @@ lib_deps =
 
   function wizRestart() {
     wizAnswers=[]; wizStep=0;
-    document.getElem
+    document.getElementById('wiz-result').style.display='none';
+    document.getElementById('wiz-questions').style.display='block';
+    renderQuestion();
+  }
+
+  renderQuestion();
+</script>
+</body>
+</html>
