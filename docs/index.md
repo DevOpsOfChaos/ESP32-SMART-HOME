@@ -1,6 +1,7 @@
 ---
 layout: default
-title: ESP32 Smart Home
+title: ESP32 Smart Home (legacy)
+permalink: /legacy-index/
 ---
 
 # ESP32 Smart Home
@@ -14,7 +15,7 @@ The project has two separate technical tracks:
 | Custom firmware | Full project architecture | ESP-NOW -> Master -> MQTT -> local server |
 | ESPHome | Simple Home Assistant adoption | ESPHome API -> Home Assistant |
 
-That separation matters. ESPHome is not the same runtime stack rewritten in YAML. It is the easier path for people who want simple devices that fit naturally into Home Assistant.
+That separation matters. ESPHome is not the same runtime stack rewritten in YAML. It is the simpler path for people who want devices that fit naturally into Home Assistant.
 
 ## What the repository contains
 
@@ -36,7 +37,7 @@ Supported current configs:
 - `NET-SEN-020` weather station
 - `NET-ZRL-020` shutter module
 
-Some older ESPHome MQTT-contract files still remain in the repo as migration references. They are valid transitional material, not the main public story.
+Some older ESPHome MQTT-contract files still remain in the repository as migration references. They are transitional material, not the main public story.
 
 ## Current custom firmware direction
 
@@ -59,8 +60,8 @@ The custom firmware remains the core architecture for the full project:
 
 ## Reality check
 
-This repository is a documented project state, not a polished product platform.
+This repository is a documented engineering project, not a polished product platform.
 
-If you want the original full architecture, use `firmware/`.
+If you want the full original architecture, use `firmware/`.
 
 If you want the easier Home Assistant path, use `esphome/`.

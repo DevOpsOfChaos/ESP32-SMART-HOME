@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Smart Home</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg2: #161b22;
+      --bg3: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --accent3: #d2a8ff;
+      --orange: #f0883e;
+      --yellow: #e3b341;
+      --radius: 8px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+      --nav-h: 56px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--nav-h) + 12px); }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-size: 16px; line-height: 1.65;
+      -webkit-text-size-adjust: 100%; overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 200;
+      background: rgba(13,17,23,0.96); backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.25rem;
+      display: flex; align-items: center; justify-content: space-between;
+      height: var(--nav-h); gap: 1rem;
+    }
+    .nav-brand { font-weight: 700; font-size: .95rem; color: var(--text); display: flex; align-items: center; gap: .4rem; white-space: nowrap; flex-shrink: 0; }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; gap: 1.25rem; font-size: .82rem; align-items: center; }
+    .nav-links a { color: var(--text-muted); transition: color .2s; white-space: nowrap; }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-right { display: flex; align-items: center; gap: .6rem; flex-shrink: 0; }
+    .lang-toggle {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 20px; padding: 5px 12px; font-size: .78rem;
+      cursor: pointer; color: var(--text); transition: border-color .2s;
+      white-space: nowrap; min-height: 34px;
+    }
+    .lang-toggle:hover { border-color: var(--accent); }
+    .nav-hamburger {
+      display: none; flex-direction: column; justify-content: center; gap: 5px;
+      width: 40px; height: 40px; padding: 8px;
+      background: none; border: 1px solid var(--border); border-radius: var(--radius);
+      cursor: pointer; flex-shrink: 0;
+    }
+    .nav-hamburger span { display: block; height: 2px; background: var(--text); border-radius: 2px; transition: all .25s; }
+    .nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .nav-hamburger.open span:nth-child(2) { opacity: 0; }
+    .nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .nav-drawer {
+      display: none; position: fixed; top: var(--nav-h); left: 0; right: 0;
+      background: rgba(13,17,23,0.99); border-bottom: 1px solid var(--border);
+      padding: .75rem 1.25rem 1.5rem; flex-direction: column; gap: .1rem;
+      z-index: 190; animation: slideDown .2s ease;
+    }
+    .nav-drawer.open { display: flex; }
+    .nav-drawer a { color: var(--text-muted); font-size: .95rem; padding: .65rem .5rem; border-bottom: 1px solid var(--border); transition: color .2s; }
+    .nav-drawer a:last-child { border-bottom: none; }
+    .nav-drawer a:hover { color: var(--text); text-decoration: none; }
+    @keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    @media(max-width: 720px) { .nav-links { display: none; } .nav-hamburger { display: flex; } }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 980px; margin: 0 auto; padding: 0 1.25rem; }
+    section { padding: 4.5rem 0; }
+    @media(max-width: 640px) { section { padding: 2.75rem 0; } }
+    section + section { border-top: 1px solid var(--border); }
+
+    /* ── HERO ── */
+    #hero { padding: 5rem 0 4.5rem; text-align: center; background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(88,166,255,.12) 0%, transparent 70%); }
+    @media(max-width: 640px) { #hero { padding: 3rem 0 2.5rem; } }
+    .hero-badge { display: inline-block; background: rgba(88,166,255,.12); border: 1px solid rgba(88,166,255,.3); border-radius: 20px; padding: 4px 14px; font-size: .78rem; color: var(--accent); margin-bottom: 1.25rem; }
+    h1 { font-size: clamp(1.75rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -.03em; margin-bottom: 1rem; }
+    h1 em { font-style: normal; color: var(--accent); }
+    .hero-sub { font-size: clamp(.92rem, 2.5vw, 1.08rem); color: var(--text-muted); max-width: 580px; margin: 0 auto 2rem; }
+    .btn-row { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: .4rem; padding: .65rem 1.4rem; border-radius: var(--radius); font-size: .875rem; font-weight: 600; cursor: pointer; transition: all .2s; border: none; min-height: 44px; -webkit-tap-highlight-color: transparent; }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-primary:hover { background: #79b8ff; text-decoration: none; }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+    @media(max-width: 380px) { .btn { width: 100%; justify-content: center; } .btn-row { flex-direction: column; padding: 0 .5rem; } }
+
+    /* ── HEADINGS ── */
+    .section-label { font-size: .7rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: .5rem; }
+    h2 { font-size: clamp(1.4rem, 4vw, 1.9rem); font-weight: 700; margin-bottom: .75rem; }
+    h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: .5rem; }
+    .section-desc { color: var(--text-muted); max-width: 680px; margin-bottom: 2rem; font-size: .93rem; }
+
+    /* ── CARDS ── */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
+    .card-sm { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.125rem; }
+
+    /* ── TAGS ── */
+    .tag-row { display: flex; flex-wrap: wrap; gap: .35rem; }
+    .tag { font-size: .71rem; padding: 3px 9px; border-radius: 12px; background: var(--bg3); border: 1px solid var(--border); color: var(--text-muted); }
+    .tag.green { background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.3); color: var(--accent2); }
+    .tag.blue { background: rgba(88,166,255,.1); border-color: rgba(88,166,255,.3); color: var(--accent); }
+    .tag.purple { background: rgba(210,168,255,.1); border-color: rgba(210,168,255,.3); color: var(--accent3); }
+    .tag.orange { background: rgba(240,136,62,.1); border-color: rgba(240,136,62,.3); color: var(--orange); }
+    .tag.yellow { background: rgba(227,179,65,.1); border-color: rgba(227,179,65,.3); color: var(--yellow); }
+
+    /* ── TRACK CARDS ── */
+    .track-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    @media(max-width: 560px) { .track-grid { grid-template-columns: 1fr; } }
+    .track-card { background: var(--bg2); border: 2px solid var(--border); border-radius: var(--radius); padding: 1.5rem; transition: border-color .2s; }
+    @media(hover: hover) { .track-card:hover { border-color: var(--accent); } }
+    .track-icon { font-size: 1.75rem; margin-bottom: .75rem; }
+    .track-card p { font-size: .875rem; color: var(--text-muted); margin-bottom: .875rem; }
+
+    /* ── ARCHITECTURE ── */
+    .arch-box { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1rem; }
+    .arch-box h4 { font-size: .95rem; margin-bottom: .75rem; display: flex; align-items: center; gap: .5rem; }
+    .arch-flow { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; font-size: .78rem; font-family: 'SFMono-Regular', Consolas, monospace; }
+    .arch-node { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--text); white-space: nowrap; }
+    .arch-arrow { color: var(--text-muted); font-size: .9rem; flex-shrink: 0; }
+    .arch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media(max-width: 640px) { .arch-grid { grid-template-columns: 1fr; } }
+
+    /* ── CODE ── */
+    code {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;
+      padding: 2px 6px; font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: .8em; color: var(--orange); word-break: break-all; overflow-wrap: anywhere;
+    }
+    pre {
+      background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 1rem 1.125rem; overflow-x: auto; font-size: .82rem;
+      font-family: 'SFMono-Regular', Consolas, monospace; line-height: 1.7;
+      color: var(--text); margin: .75rem 0;
+    }
+    pre code { background: none; border: none; padding: 0; font-size: inherit; color: inherit; word-break: normal; overflow-wrap: normal; }
+    .pre-label { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: .2rem; }
+
+    /* ── STEP GUIDE ── */
+    .guide-grid { display: grid; gap: 0; }
+    .guide-step {
+      display: grid; grid-template-columns: 56px 1fr; gap: 0;
+      padding-bottom: 2rem; position: relative;
+    }
+    .guide-step:last-child { padding-bottom: 0; }
+    .guide-step-num {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    .step-circle {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--accent); color: #0d1117;
+      font-size: .8rem; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; z-index: 1; position: relative;
+    }
+    .step-circle.done { background: var(--accent2); }
+    .step-line {
+      width: 2px; flex: 1; background: var(--border);
+      margin-top: 4px; margin-bottom: -4px;
+    }
+    .guide-step:last-child .step-line { display: none; }
+    .guide-step-body { padding-left: .75rem; padding-top: .4rem; }
+    .guide-step-body h4 { font-size: .975rem; font-weight: 700; margin-bottom: .35rem; }
+    .guide-step-body p { font-size: .875rem; color: var(--text-muted); margin-bottom: .5rem; }
+
+    /* ── NOTE BOXES ── */
+    .note { border-radius: var(--radius); padding: .75rem 1rem; font-size: .85rem; margin: .75rem 0; display: flex; gap: .6rem; align-items: flex-start; }
+    .note.warn { background: rgba(227,179,65,.08); border: 1px solid rgba(227,179,65,.3); color: var(--yellow); }
+    .note.info { background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.25); color: var(--accent); }
+    .note.tip { background: rgba(63,185,80,.07); border: 1px solid rgba(63,185,80,.25); color: var(--accent2); }
+    .note-icon { flex-shrink: 0; font-size: 1rem; margin-top: .05rem; }
+    .note p { color: var(--text); margin: 0; }
+    .note strong { color: inherit; }
+
+    /* ── TABLE ── */
+    .tbl-wrap { overflow-x: auto; margin: .75rem 0; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: .835rem; }
+    th { background: var(--bg3); color: var(--text-muted); font-weight: 700; font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; padding: .6rem 1rem; text-align: left; white-space: nowrap; }
+    td { padding: .6rem 1rem; border-top: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: rgba(255,255,255,.02); }
+    td code { font-size: .78em; }
+
+    /* ── DEVICE GRID ── */
+    .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+    .device-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.125rem; }
+    .device-family { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: .35rem; }
+    .device-card h4 { font-size: .925rem; margin-bottom: .3rem; }
+    .device-card p { font-size: .82rem; color: var(--text-muted); margin-bottom: .625rem; }
+    .device-env { font-size: .78rem; font-family: 'SFMono-Regular', Consolas, monospace; color: var(--accent3); margin-bottom: .5rem; }
+
+    /* ── DECISION WIZARD ── */
+    .wizard-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+    .wizard-header { background: linear-gradient(135deg, rgba(88,166,255,.15), rgba(210,168,255,.08)); border-bottom: 1px solid var(--border); padding: 1.25rem 1.5rem; }
+    .wizard-header h3 { font-size: 1.05rem; margin-bottom: .2rem; }
+    .wizard-header p { font-size: .82rem; color: var(--text-muted); }
+    .wizard-body { padding: 1.5rem; }
+    @media(max-width: 480px) { .wizard-body { padding: 1.125rem 1rem; } }
+    .wizard-progress { display: flex; gap: .4rem; margin-bottom: 1.5rem; align-items: center; }
+    .progress-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all .3s; flex-shrink: 0; }
+    .progress-dot.active { background: var(--accent); width: 20px; border-radius: 4px; }
+    .progress-dot.done { background: var(--accent2); }
+    .wizard-question { font-size: clamp(1rem, 2.5vw, 1.1rem); font-weight: 600; margin-bottom: 1.25rem; line-height: 1.4; }
+    .wizard-options { display: grid; gap: .6rem; }
+    .wizard-opt {
+      background: var(--bg3); border: 2px solid var(--border);
+      border-radius: var(--radius); padding: .875rem 1rem;
+      cursor: pointer; transition: border-color .15s, background .15s;
+      display: flex; align-items: flex-start; gap: .75rem;
+      min-height: 56px; -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    @media(hover: hover) { .wizard-opt:hover { border-color: var(--accent); background: rgba(88,166,255,.06); } }
+    .wizard-opt:active { background: rgba(88,166,255,.12); border-color: var(--accent); }
+    .wizard-opt.selected { border-color: var(--accent); background: rgba(88,166,255,.1); }
+    .opt-icon { font-size: 1.3rem; flex-shrink: 0; margin-top: .05rem; }
+    .opt-label { font-weight: 600; font-size: .9rem; margin-bottom: .08rem; line-height: 1.3; }
+    .opt-desc { font-size: .79rem; color: var(--text-muted); }
+    .wizard-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 1.25rem; gap: .75rem; }
+    .wizard-back { background: none; border: 1px solid var(--border); color: var(--text-muted); border-radius: var(--radius); padding: .6rem 1rem; cursor: pointer; font-size: .875rem; transition: all .2s; min-height: 44px; }
+    .wizard-back:hover { border-color: var(--text-muted); color: var(--text); }
+    .wizard-back:disabled { opacity: .3; cursor: default; pointer-events: none; }
+    .wizard-result { display: none; }
+    .result-header { text-align: center; padding: 1.25rem 0 1.5rem; }
+    .result-icon { font-size: 3rem; margin-bottom: .5rem; }
+    .result-track { font-size: clamp(1.2rem, 4vw, 1.4rem); font-weight: 800; margin-bottom: .5rem; }
+    .result-track.custom { color: var(--accent); }
+    .result-track.esphome { color: var(--accent2); }
+    .result-track.both { color: var(--accent3); }
+    .result-summary { font-size: .875rem; color: var(--text-muted); max-width: 480px; margin: 0 auto; }
+    .result-reasons { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.125rem; margin: 1.25rem 0; }
+    .result-reasons h4 { font-size: .78rem; font-weight: 700; margin-bottom: .6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+    .reason-item { display: flex; align-items: flex-start; gap: .5rem; margin-bottom: .4rem; font-size: .875rem; }
+    .reason-check { color: var(--accent2); flex-shrink: 0; }
+    .result-next h4 { font-size: .875rem; font-weight: 700; margin-bottom: .6rem; }
+    .next-steps { display: grid; gap: .45rem; }
+    .next-step { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: .65rem .875rem; display: flex; align-items: flex-start; gap: .75rem; font-size: .84rem; line-height: 1.45; }
+    .step-num-sm { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #0d1117; font-size: .72rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .wizard-restart { text-align: center; margin-top: 1.25rem; }
+    .wizard-restart button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: .85rem; text-decoration: underline; min-height: 44px; padding: 0 .5rem; }
+
+    /* ── PIN TABLE ── */
+    .pin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
+
+    /* ── FOOTER ── */
+    footer { border-top: 1px solid var(--border); padding: 2rem 1.25rem; text-align: center; color: var(--text-muted); font-size: .85rem; }
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--accent); }
+
+    /* ── I18N ── */
+    .de, .en { display: none; }
+    body.lang-de .de { display: revert; }
+    body.lang-en .en { display: revert; }
+    body.lang-de .en-inline { display: none; }
+    body.lang-en .de-inline { display: none; }
+    .en-inline, .de-inline { display: inline; }
+
+    /* ── TAB SWITCHER ── */
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab-btn { padding: .6rem 1.1rem; font-size: .85rem; font-weight: 600; color: var(--text-muted); background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: all .2s; min-height: 44px; }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-btn:hover { color: var(--text); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── COLLAPSIBLE ── */
+    details { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: .75rem; }
+    details summary { padding: .875rem 1.125rem; font-weight: 600; font-size: .9rem; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; gap: .5rem; -webkit-tap-highlight-color: transparent; min-height: 50px; }
+    details summary::after { content: '›'; font-size: 1.2rem; color: var(--text-muted); transform: rotate(90deg); transition: transform .2s; display: inline-block; }
+    details[open] summary::after { transform: rotate(270deg); }
+    details summary::-webkit-details-marker { display: none; }
+    details > div { padding: 0 1.125rem 1.125rem; font-size: .875rem; }
+    details > div p { color: var(--text-muted); margin-bottom: .5rem; }
+  </style>
+</head>
+<body class="lang-de">
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="nav-brand">⚡ <span>ESP32</span> Smart Home</div>
+  <div class="nav-links">
+    <a href="#tracks" class="de">Tracks</a>
+    <a href="#tracks" class="en">Tracks</a>
+    <a href="#wizard-section" class="de">Entscheidungshelfer</a>
+    <a href="#wizard-section" class="en">Decision Guide</a>
+    <a href="#guide-custom" class="de">Custom Guide</a>
+    <a href="#guide-custom" class="en">Custom Guide</a>
+    <a href="#guide-esphome">ESPHome Guide</a>
+    <a href="#devices" class="de">Geräte</a>
+    <a href="#devices" class="en">Devices</a>
+    <a href="https://github.com/DevOpsOfChaos/esp32-smart-home" target="_blank">GitHub ↗</a>
+  </div>
+  <div class="nav-right">
+    <button class="lang-toggle" onclick="toggleLang()" aria-label="Sprache wechseln">
+      <span class="de-inline">🇬🇧 EN</span>
+      <span class="en-inline">🇩🇪 DE</span>
+    </button>
+    <button class="nav-hamburger" id="nav-hamburger" onclick="toggleDrawer()" aria-label="Menü" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+<div class="nav-drawer" id="nav-drawer" role="navigation">
+  <a href="#tracks" class="de" onclick="closeDrawer()">Tracks</a>
+  <a href="#tracks" class="en" onclick="closeDrawer()">Tracks</a>
+  <a href="#wizard-section" class="de" onclick="closeDrawer()">Entscheidungshelfer</a>
+  <a href="#wizard-section" class="en" onclick="closeDrawer()">Decision Guide</a>
+  <a href="#guide-custom" onclick="closeDrawer()">Custom Firmware Guide</a>
+  <a href="#guide-esphome" onclick="closeDrawer()">ESPHome Guide</a>
+  <a href="#devices" class="de" onclick="closeDrawer()">Geräte</a>
+  <a href="#devices" class="en" onclick="closeDrawer()">Devices</a>
+  <a href="https://github.com/DevOpsOfChaos/esp32-smart-home" target="_blank" onclick="closeDrawer()">GitHub ↗</a>
+</div>
+
+<!-- ── HERO ── -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-badge"><span class="de">Lokales ESP32 Smart Home · Keine Cloud</span><span class="en">Local-first ESP32 Smart Home · No Cloud</span></div>
+    <h1>
+      <span class="de">Echtes Smart Home.<br /><em>Keine Cloud.</em></span>
+      <span class="en">Real Smart Home.<br /><em>No Cloud.</em></span>
+    </h1>
+    <p class="hero-sub">
+      <span class="de">Custom ESP32-C3 Hardware, eigene C++ Firmware über ESP-NOW, und ein separater ESPHome-Track für Home Assistant. Lokal. Deterministisch. Vollständig dokumentiert.</span>
+      <span class="en">Custom ESP32-C3 hardware, own C++ firmware over ESP-NOW, and a separate ESPHome track for Home Assistant. Local. Deterministic. Fully documented.</span>
+    </p>
+    <div class="btn-row">
+      <a href="#wizard-section" class="btn btn-primary">
+        <span class="de">🧭 Welcher Track passt zu mir?</span>
+        <span class="en">🧭 Which track fits me?</span>
+      </a>
+      <a href="https://github.com/DevOpsOfChaos/esp32-smart-home" target="_blank" class="btn btn-outline">📦 GitHub</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── TWO TRACKS ── -->
+<section id="tracks">
+  <div class="container">
+    <div class="section-label"><span class="de">Das Projekt</span><span class="en">The Project</span></div>
+    <h2><span class="de">Zwei unabhängige Tracks</span><span class="en">Two independent tracks</span></h2>
+    <p class="section-desc">
+      <span class="de">Das Repository hat zwei klar getrennte Wege. ESPHome ist kein YAML-Rewrite der Custom Firmware – es ist ein bewusst einfacherer, separater Pfad.</span>
+      <span class="en">The repository has two clearly separated paths. ESPHome is not the custom firmware stack rewritten in YAML – it is a deliberately simpler, separate path.</span>
+    </p>
+    <div class="track-grid">
+      <div class="track-card">
+        <div class="track-icon">⚙️</div>
+        <h3>Custom Firmware</h3>
+        <p>
+          <span class="de">PlatformIO / C++ Firmware. Binäres ESP-NOW-Protokoll, Master-Bridge, MQTT, Node-RED Dashboard und SQLite. Volle Kontrolle über jeden Layer – Protokoll, Payload, Provisioning und Gerätelogik.</span>
+          <span class="en">PlatformIO / C++ firmware. Binary ESP-NOW protocol, master bridge, MQTT, Node-RED dashboard and SQLite. Full control over every layer – protocol, payload, provisioning and device logic.</span>
+        </p>
+        <div class="tag-row">
+          <span class="tag blue">PlatformIO</span>
+          <span class="tag blue">ESP-NOW</span>
+          <span class="tag blue">MQTT</span>
+          <span class="tag blue">Node-RED</span>
+          <span class="tag blue">C++</span>
+          <span class="tag blue">Docker</span>
+        </div>
+      </div>
+      <div class="track-card">
+        <div class="track-icon">🏠</div>
+        <h3>ESPHome</h3>
+        <p>
+          <span class="de">YAML-basierte Gerätekonfiguration. Direkte Home Assistant Integration über die native ESPHome API. Kein ESP-NOW, kein Master, kein Server nötig. Einstieg in Minuten statt Stunden.</span>
+          <span class="en">YAML-based device configuration. Direct Home Assistant integration via the native ESPHome API. No ESP-NOW, no master, no server needed. Getting started in minutes instead of hours.</span>
+        </p>
+        <div class="tag-row">
+          <span class="tag green">ESPHome</span>
+          <span class="tag green">YAML</span>
+          <span class="tag green">Home Assistant</span>
+          <span class="tag green">OTA</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture -->
+    <div style="margin-top: 2rem;">
+      <div class="arch-grid">
+        <div class="arch-box">
+          <h4>⚙️ Custom Firmware</h4>
+          <div class="arch-flow">
+            <span class="arch-node">ESP32-C3</span><span class="arch-arrow">→</span>
+            <span class="arch-node">ESP-NOW</span><span class="arch-arrow">→</span>
+            <span class="arch-node">Master</span><span class="arch-arrow">→</span>
+            <span class="arch-node">MQTT</span><span class="arch-arrow">→</span>
+            <span class="arch-node">Node-RED</span><span class="arch-arrow">→</span>
+            <span class="arch-node">SQLite</span>
+          </div>
+        </div>
+        <div class="arch-box">
+          <h4>🏠 ESPHome</h4>
+          <div class="arch-flow">
+            <span class="arch-node">ESP32-C3</span><span class="arch-arrow">→</span>
+            <span class="arch-node">ESPHome API</span><span class="arch-arrow">→</span>
+            <span class="arch-node">Home Assistant</span>
+          </div>
+        </div>
+      </div>
+      <div class="arch-box" style="margin-top: 0;">
+        <h4>🔩 <span class="de">Gemeinsame Hardware: ESP32-C3 SuperMini Plus V2.0</span><span class="en">Shared Hardware: ESP32-C3 SuperMini Plus V2.0</span></h4>
+        <p style="font-size:.84rem; color: var(--text-muted); margin-bottom:.625rem;">
+          <span class="de">Beide Tracks laufen auf denselben Platinen. RISC-V, 4 MB Flash, 400 KB SRAM, 802.11n, BLE 5.0, native USB-CDC. PlatformIO-Board: </span>
+          <span class="en">Both tracks run on the same boards. RISC-V, 4 MB Flash, 400 KB SRAM, 802.11n, BLE 5.0, native USB-CDC. PlatformIO board: </span>
+          <code>esp32-c3-devkitm-1</code>
+        </p>
+        <div class="arch-flow">
+          <span class="arch-node">ESP32-C3</span><span class="arch-arrow">+</span>
+          <span class="arch-node de">Modularer Steuerkreis</span><span class="arch-node en">Modular circuit</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-node de">Sensoren (I2C)</span><span class="arch-node en">Sensors (I2C)</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-node de">Relais / Aktoren</span><span class="arch-node en">Relays / Actuators</span>
+          <span class="arch-arrow">+</span>
+          <span class="arch-node de">3D-Gehäuse</span><span class="arch-node en">3D Enclosure</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DECISION WIZARD ── -->
+<section id="wizard-section">
+  <div class="container">
+    <div class="section-label"><span class="de">Entscheidungshelfer</span><span class="en">Decision Guide</span></div>
+    <h2><span class="de">Welcher Track ist der richtige?</span><span class="en">Which track is right for you?</span></h2>
+    <p class="section-desc"><span class="de">Beantworte 4 Fragen – du bekommst eine Empfehlung mit Begründung und konkreten nächsten Schritten.</span><span class="en">Answer 4 questions – you'll get a recommendation with reasoning and concrete next steps.</span></p>
+    <div class="wizard-wrap">
+      <div class="wizard-header">
+        <h3><span class="de">🧭 Track-Empfehlung</span><span class="en">🧭 Track Recommendation</span></h3>
+        <p><span class="de">Keine Antwort ist falsch. Jede Antwort bringt dich näher an die richtige Wahl.</span><span class="en">No answer is wrong. Every answer brings you closer to the right choice.</span></p>
+      </div>
+      <div class="wizard-body">
+        <div class="wizard-progress" id="wiz-progress"></div>
+        <div id="wiz-questions">
+          <div class="wizard-question" id="wiz-q"></div>
+          <div class="wizard-options" id="wiz-opts"></div>
+          <div class="wizard-nav">
+            <button class="wizard-back" id="wiz-back" onclick="wizBack()" disabled>
+              <span class="de">← Zurück</span><span class="en">← Back</span>
+            </button>
+            <span id="wiz-counter" style="font-size:.8rem; color: var(--text-muted);"></span>
+          </div>
+        </div>
+        <div id="wiz-result" class="wizard-result">
+          <div class="result-header">
+            <div class="result-icon" id="res-icon"></div>
+            <div class="result-track" id="res-track"></div>
+            <div class="result-summary" id="res-summary"></div>
+          </div>
+          <div class="result-reasons">
+            <h4><span class="de">Warum diese Empfehlung</span><span class="en">Why this recommendation</span></h4>
+            <div id="res-reasons"></div>
+          </div>
+          <div class="result-next">
+            <h4><span class="de">Nächste Schritte</span><span class="en">Next steps</span></h4>
+            <div class="next-steps" id="res-steps"></div>
+          </div>
+          <div class="wizard-restart">
+            <button onclick="wizRestart()"><span class="de">↺ Nochmal starten</span><span class="en">↺ Start again</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CUSTOM FIRMWARE GUIDE ── -->
+<section id="guide-custom">
+  <div class="container">
+    <div class="section-label"><span class="de">Schritt-für-Schritt</span><span class="en">Step by Step</span></div>
+    <h2>⚙️ Custom Firmware Guide</h2>
+    <p class="section-desc">
+      <span class="de">Von einem leeren Rechner bis zum ersten Gerät das per ESP-NOW mit dem Master kommuniziert. Lies das vollständig bevor du anfängst.</span>
+      <span class="en">From a bare machine to the first device communicating with the master over ESP-NOW. Read this completely before you start.</span>
+    </p>
+
+    <!-- Prerequisites -->
+    <h3 style="margin-bottom:1rem;"><span class="de">Voraussetzungen</span><span class="en">Prerequisites</span></h3>
+    <div class="arch-grid" style="margin-bottom:2rem;">
+      <div class="card-sm">
+        <div style="font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.6rem;"><span class="de">Software</span><span class="en">Software</span></div>
+        <div style="font-size:.875rem; display:grid; gap:.35rem;">
+          <div>🐍 <strong>Python 3.8+</strong> — <span class="de">wird von PlatformIO benötigt</span><span class="en">required by PlatformIO</span></div>
+          <div>📦 <strong>PlatformIO</strong> — <span class="de">als VS Code Extension oder CLI</span><span class="en">as VS Code extension or CLI</span></div>
+          <div>🐳 <strong>Docker Desktop</strong> — <span class="de">für den lokalen Server-Stack</span><span class="en">for the local server stack</span></div>
+          <div>🔧 <strong>Git</strong></div>
+          <div>💻 <strong>VS Code</strong> <span class="de">(empfohlen)</span><span class="en">(recommended)</span></div>
+        </div>
+      </div>
+      <div class="card-sm">
+        <div style="font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.6rem;">Hardware</div>
+        <div style="font-size:.875rem; display:grid; gap:.35rem;">
+          <div>🔌 <span class="de">Mindestens 2× ESP32-C3 SuperMini</span><span class="en">At least 2× ESP32-C3 SuperMini</span> <span style="color:var(--text-muted)"><span class="de">(1 Master + 1 Gerät)</span><span class="en">(1 master + 1 device)</span></span></div>
+          <div>🔗 USB-C <span class="de">Kabel zum Flashen</span><span class="en">cable for flashing</span></div>
+          <div>🌐 <span class="de">Lokales WLAN + MQTT-fähiges Netzwerk</span><span class="en">Local WiFi + MQTT-capable network</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step-by-step -->
+    <div class="guide-grid">
+
+      <!-- Step 1 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">1</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Repository klonen</span><span class="en">Clone the repository</span></h4>
+          <p><span class="de">Das Repo liegt auf GitHub. Klon in ein lokales Verzeichnis deiner Wahl.</span><span class="en">The repo is on GitHub. Clone into a local directory of your choice.</span></p>
+          <div class="pre-label">git</div>
+          <pre><code>git clone https://github.com/DevOpsOfChaos/esp32-smart-home.git
+cd esp32-smart-home</code></pre>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">2</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Secrets.h anlegen</span><span class="en">Create Secrets.h</span></h4>
+          <p>
+            <span class="de">Die Firmware liest Zugangsdaten aus <code>firmware/include/Secrets.h</code>. Diese Datei ist in <code>.gitignore</code> und darf nie ins Repository. Kopiere die Vorlage:</span>
+            <span class="en">The firmware reads credentials from <code>firmware/include/Secrets.h</code>. This file is in <code>.gitignore</code> and must never be committed. Copy the template:</span>
+          </p>
+          <div class="pre-label">PowerShell</div>
+          <pre><code>Copy-Item firmware/include/Secrets.example.h firmware/include/Secrets.h</code></pre>
+          <p><span class="de">Dann die vier Werte eintragen:</span><span class="en">Then fill in the four values:</span></p>
+          <pre><code>#define WIFI_SSID     "DEIN_WLAN_NAME"
+#define WIFI_PASSWORD "DEIN_WLAN_PASSWORT"
+#define MQTT_HOST     "192.168.1.100"  <span class="de">// IP des lokalen MQTT-Brokers</span><span class="en">// IP of local MQTT broker</span>
+#define MQTT_PORT     1883</code></pre>
+          <div class="note warn">
+            <span class="note-icon">⚠️</span>
+            <p><span class="de"><strong>MQTT_HOST</strong> ist die IP des Rechners auf dem Docker läuft – nicht <code>localhost</code>, weil die ESP32-Geräte übers Netzwerk verbinden.</span><span class="en"><strong>MQTT_HOST</strong> is the IP of the machine running Docker – not <code>localhost</code>, because ESP32 devices connect over the network.</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">3</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Server starten</span><span class="en">Start the server</span></h4>
+          <p><span class="de">Der lokale Stack (Mosquitto + Node-RED + SQLite) läuft per Docker Compose.</span><span class="en">The local stack (Mosquitto + Node-RED + SQLite) runs via Docker Compose.</span></p>
+          <div class="pre-label">PowerShell</div>
+          <pre><code>cd server
+Copy-Item .env.example .env
+# .env anpassen wenn nötig (Ports, Passwörter)
+docker compose up -d</code></pre>
+          <p><span class="de">Dashboard danach unter </span><span class="en">Dashboard then at </span><a href="http://localhost:1880/ui" target="_blank"><code>http://localhost:1880/ui</code></a></p>
+          <div class="note tip">
+            <span class="note-icon">💡</span>
+            <p><span class="de">Smoke-Test ausführen um den Stack zu validieren: <code>.\tests\server\server_contract_smoke.ps1 -SkipStart</code></span><span class="en">Run the smoke test to validate the stack: <code>.\tests\server\server_contract_smoke.ps1 -SkipStart</code></span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">4</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Master zuerst flashen</span><span class="en">Flash the master first</span></h4>
+          <p>
+            <span class="de">Der Master ist die ESP-NOW↔MQTT Bridge. Ohne ihn können Geräte nichts kommunizieren. Er muss als Erstes laufen. Environment: <code>master_firmware</code>.</span>
+            <span class="en">The master is the ESP-NOW↔MQTT bridge. Without it, devices cannot communicate anything. It must run first. Environment: <code>master_firmware</code>.</span>
+          </p>
+          <div class="note info">
+            <span class="note-icon">ℹ️</span>
+            <p><span class="de">Den Master-ESP32 per USB-C anschließen. Er meldet sich über native USB-CDC am PC. Falls Windows keinen COM-Port erkennt: CH343-Treiber installieren.</span><span class="en">Connect the master ESP32 via USB-C. It appears via native USB-CDC on the PC. If Windows doesn't detect a COM port: install the CH343 driver.</span></p>
+          </div>
+          <div class="pre-label">PowerShell</div>
+          <pre><code>cd firmware
+pio run -e master_firmware --target upload</code></pre>
+          <p><span class="de">Danach seriellen Monitor öffnen um die MQTT-Verbindung zu bestätigen:</span><span class="en">Then open serial monitor to confirm MQTT connection:</span></p>
+          <pre><code>pio device monitor -e master_firmware</code></pre>
+          <p><span class="de">Im Log sollte erscheinen: <code>MQTT connected</code> und <code>Master online</code>. Der Master veröffentlicht seinen Status unter <code>smarthome/master/MASTER/status</code>.</span><span class="en">The log should show: <code>MQTT connected</code> and <code>Master online</code>. The master publishes its status to <code>smarthome/master/MASTER/status</code>.</span></p>
+        </div>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">5</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Gerät-Firmware flashen</span><span class="en">Flash device firmware</span></h4>
+          <p><span class="de">Jedes Gerät hat ein eigenes PlatformIO-Environment. Das richtige Environment auswählen und flashen:</span><span class="en">Each device has its own PlatformIO environment. Select the right environment and flash:</span></p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Environment</th><th>Gerät / Device</th><th><span class="de">Bibliotheken</span><span class="en">Libraries</span></th></tr></thead>
+              <tbody>
+                <tr><td><code>master_firmware</code></td><td><span class="de">Master / Bridge</span><span class="en">Master / Bridge</span></td><td>PubSubClient</td></tr>
+                <tr><td><code>net_erl_hall_module</code></td><td>NET-ERL-001 Hall Light</td><td>BME280, VEML7700</td></tr>
+                <tr><td><code>net_erl_hall_module_led_ring</code></td><td>NET-ERL-002 Hall + LED-Ring</td><td>BME680, VEML7700, NeoPixel, ENS160</td></tr>
+                <tr><td><code>net_zrl_shutter_module</code></td><td>NET-ZRL-002 Rollladen</td><td>—</td></tr>
+                <tr><td><code>net_sen_weather_station</code></td><td>NET-SEN-002 Wetterstation</td><td>BME280, VEML7700</td></tr>
+                <tr><td><code>bat_sen_window_contact</code></td><td>BAT-SEN Fensterkontakt</td><td>—</td></tr>
+                <tr><td><code>bat_sen_rain_sensor</code></td><td>BAT-SEN Regensensor</td><td>—</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pre-label">PowerShell — <span class="de">Beispiel: Hall-Modul</span><span class="en">Example: Hall module</span></div>
+          <pre><code>pio run -e net_erl_hall_module --target upload</code></pre>
+          <div class="note warn">
+            <span class="note-icon">⚠️</span>
+            <p><span class="de">Beim ersten Flash muss PlatformIO alle Bibliotheken herunterladen. Das dauert je nach Netz 2–5 Minuten. Geduld bei <code>Resolving dependencies</code>.</span><span class="en">On the first flash, PlatformIO downloads all libraries. This takes 2–5 minutes depending on network. Be patient at <code>Resolving dependencies</code>.</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 6 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle">6</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">Setup-Portal: Gerät konfigurieren</span><span class="en">Setup Portal: Configure the device</span></h4>
+          <p>
+            <span class="de">Nach dem ersten Flash startet das Gerät im Setup-Modus und öffnet einen WLAN-Accesspoint. Über das Setup-Portal gibst du WLAN und MQTT ein.</span>
+            <span class="en">After the first flash, the device starts in setup mode and opens a WiFi access point. Through the setup portal you enter WiFi and MQTT credentials.</span>
+          </p>
+          <div class="card-sm" style="margin:.75rem 0;">
+            <div style="font-size:.78rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:.6rem;"><span class="de">Setup-Portal Ablauf</span><span class="en">Setup Portal Flow</span></div>
+            <ol style="font-size:.875rem; padding-left:1.25rem; display:grid; gap:.4rem;">
+              <li><span class="de">Gerät per USB mit Strom versorgen</span><span class="en">Power device via USB</span></li>
+              <li><span class="de">WLAN am Smartphone/PC: AP mit dem Gerätenamen suchen</span><span class="en">WiFi on phone/PC: find AP with device name</span></li>
+              <li><span class="de">Verbinden → Browser öffnet automatisch Konfigurationsseite</span><span class="en">Connect → browser opens configuration page automatically</span></li>
+              <li><span class="de">WLAN-SSID, Passwort und MQTT-IP eintragen</span><span class="en">Enter WiFi SSID, password and MQTT IP</span></li>
+              <li><span class="de">Speichern → Gerät startet neu und verbindet sich</span><span class="en">Save → device reboots and connects</span></li>
+            </ol>
+          </div>
+          <p><span class="de"><strong>Setup-Modus manuell aktivieren:</strong> Setup-Button (GPIO2) 5 Sekunden gedrückt halten bis die Setup-LED (GPIO6) blinkt.</span><span class="en"><strong>Manually activate setup mode:</strong> Hold setup button (GPIO2) for 5 seconds until the setup LED (GPIO6) blinks.</span></p>
+          <div class="note tip">
+            <span class="note-icon">💡</span>
+            <p><span class="de">Nach erfolgreichem Setup sendet das Gerät ein <strong>HELLO</strong>-Paket per ESP-NOW an den Master. Der Master registriert es dynamisch und veröffentlicht Metadaten unter <code>smarthome/device/{id}/meta</code>.</span><span class="en">After successful setup the device sends a <strong>HELLO</strong> packet via ESP-NOW to the master. The master registers it dynamically and publishes metadata to <code>smarthome/device/{id}/meta</code>.</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 7 -->
+      <div class="guide-step">
+        <div class="guide-step-num">
+          <div class="step-circle done">✓</div>
+        </div>
+        <div class="guide-step-body">
+          <h4><span class="de">OTA-Updates danach</span><span class="en">OTA Updates afterwards</span></h4>
+          <p><span class="de">Nach dem ersten USB-Flash kannst du alle folgenden Updates über OTA (Over-the-Air) einspielen, solange das Gerät im WLAN ist:</span><span class="en">After the first USB flash you can deploy all subsequent updates via OTA (Over-the-Air) as long as the device is on WiFi:</span></p>
+          <pre><code>pio run -e net_erl_hall_module --target upload --upload-port 192.168.1.XXX</code></pre>
+          <p><span class="de">Die IP-Adresse des Geräts siehst du im seriellen Monitor beim Boot oder im Router.</span><span class="en">Find the device's IP in the serial monitor at boot or in your router.</span></p>
+        </div>
+      </div>
+
+    </div><!-- /guide-grid -->
+  </div>
+</section>
+
+<!-- ── ESPHOME GUIDE ── -->
+<section id="guide-esphome">
+  <div class="container">
+    <div class="section-label">ESPHome Track</div>
+    <h2>🏠 ESPHome Guide</h2>
+    <p class="section-desc">
+      <span class="de">Kein C++, kein Master, kein Server. Du brauchst nur Home Assistant mit installiertem ESPHome Add-on.</span>
+      <span class="en">No C++, no master, no server. You only need Home Assistant with the ESPHome add-on installed.</span>
+    </p>
+
+    <div class="note info" style="margin-bottom:1.5rem;">
+      <span class="note-icon">ℹ️</span>
+      <p><span class="de">Dieser Track funktioniert <strong>unabhängig</strong> vom Custom Firmware Stack. Du brauchst keinen MQTT-Broker und keinen Docker-Stack – nur Home Assistant mit dem ESPHome Add-on.</span><span class="en">This track works <strong>independently</strong> from the custom firmware stack. You don't need an MQTT broker or Docker stack – just Home Assistant with the ESPHome add-on.</span></p>
+    </div>
+
+    <div class="guide-grid">
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">1</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Device-YAML kopieren</span><span class="en">Copy device YAML</span></h4>
+          <p><span class="de">Das Repo klonen oder direkt die YAML-Datei für dein Gerät aus <code>esphome/devices/</code> herunterladen:</span><span class="en">Clone the repo or directly download the YAML file for your device from <code>esphome/devices/</code>:</span></p>
+          <div class="pre-label">git</div>
+          <pre><code>git clone https://github.com/DevOpsOfChaos/esp32-smart-home.git</code></pre>
+          <div class="tbl-wrap" style="margin-top:.75rem;">
+            <table>
+              <thead><tr><th>YAML-Datei</th><th>Gerät / Device</th></tr></thead>
+              <tbody>
+                <tr><td><code>net_erl_hall_module.yaml</code></td><td>NET-ERL-010 Hall-Modul (PIR + BME280 + VEML7700 + Relais)</td></tr>
+                <tr><td><code>net_erl_hall_module_led_ring.yaml</code></td><td>NET-ERL-020 Hall-Modul + LED-Ring</td></tr>
+                <tr><td><code>net_sen_weather_station.yaml</code></td><td>NET-SEN-020 Wetterstation</td></tr>
+                <tr><td><code>net_zrl_shutter_module.yaml</code></td><td>NET-ZRL-020 Rolladen-Steuerung</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">2</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">secrets.yaml befüllen</span><span class="en">Fill in secrets.yaml</span></h4>
+          <p><span class="de">Im gleichen Ordner eine <code>secrets.yaml</code> anlegen:</span><span class="en">Create a <code>secrets.yaml</code> in the same folder:</span></p>
+          <pre><code>wifi_ssid: "DEIN_WLAN"
+wifi_password: "DEIN_PASSWORT"
+ota_password: "EIN_SICHERES_OTA_PASSWORT"</code></pre>
+          <div class="note warn"><span class="note-icon">⚠️</span><p><span class="de"><code>secrets.yaml</code> nie ins Repository committen.</span><span class="en">Never commit <code>secrets.yaml</code> to the repository.</span></p></div>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">3</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Config validieren</span><span class="en">Validate config</span></h4>
+          <p><span class="de">Vor dem Flashen die Konfiguration prüfen:</span><span class="en">Check the configuration before flashing:</span></p>
+          <div class="pre-label">PowerShell — <span class="de">vom Repo-Root</span><span class="en">from repo root</span></div>
+          <pre><code># Einzelnes Gerät validieren:
+.\scripts\check_esphome.ps1 -Device net_erl_hall_module
+
+# Alle ESPHome-Configs validieren:
+.\scripts\check_esphome.ps1</code></pre>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">4</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Erstmalig per USB flashen</span><span class="en">Initial flash via USB</span></h4>
+          <p><span class="de">Den ESP32-C3 per USB-C anschließen und flashen. Das geht direkt über das ESPHome Dashboard in Home Assistant oder über die CLI:</span><span class="en">Connect the ESP32-C3 via USB-C and flash. This works directly via the ESPHome dashboard in Home Assistant or via CLI:</span></p>
+          <pre><code>esphome run esphome/devices/net_erl_hall_module.yaml</code></pre>
+          <div class="note info"><span class="note-icon">ℹ️</span><p><span class="de">Beim ersten Flash über USB den Board-Boot-Mode aktivieren: GPIO9 (Boot-Button) gedrückt halten während du USB einsteckst, dann loslassen. Danach erkennt ESPHome den Port automatisch.</span><span class="en">For the first USB flash, activate boot mode: hold GPIO9 (Boot button) while plugging in USB, then release. ESPHome will then detect the port automatically.</span></p></div>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle done">✓</div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">In Home Assistant adoptieren</span><span class="en">Adopt in Home Assistant</span></h4>
+          <p><span class="de">Sobald das Gerät im WLAN ist, erscheint es in Home Assistant unter <strong>Einstellungen → Integrationen</strong> als neues ESPHome-Gerät. Adoption klicken → fertig. Alle weiteren Updates per OTA.</span><span class="en">Once the device is on WiFi, it appears in Home Assistant under <strong>Settings → Integrations</strong> as a new ESPHome device. Click adopt → done. All further updates via OTA.</span></p>
+        </div>
+      </div>
+
+    </div><!-- /guide-grid -->
+  </div>
+</section>
+
+<!-- ── DEVICE CATALOG ── -->
+<section id="devices">
+  <div class="container">
+    <div class="section-label"><span class="de">Gerätekatalog</span><span class="en">Device Catalog</span></div>
+    <h2><span class="de">Gerätfamilien & Pin-Belegungen</span><span class="en">Device Families & Pin Assignments</span></h2>
+    <p class="section-desc">
+      <span class="de">Alle Geräte verwenden den ESP32-C3 SuperMini Plus V2.0 (<code>esp32-c3-devkitm-1</code>). Die Pin-Belegungen sind direkt aus dem Firmware-Quellcode entnommen.</span>
+      <span class="en">All devices use the ESP32-C3 SuperMini Plus V2.0 (<code>esp32-c3-devkitm-1</code>). Pin assignments are taken directly from the firmware source code.</span>
+    </p>
+
+    <div style="display:grid; gap:1rem;">
+
+      <details open>
+        <summary>⚙️ NET-ERL — <span class="de">Relaisknoten (Netz)</span><span class="en">Relay Node (Mains)</span></summary>
+        <div>
+          <p><span class="de">Netzversorgter Relaisknoten für Beleuchtung und Komfortsteuerung. Zwei Varianten: Standard-Modul und LED-Ring-Variante.</span><span class="en">Mains-powered relay node for lighting and comfort control. Two variants: standard module and LED ring variant.</span></p>
+          <div class="arch-grid" style="margin-top:.75rem;">
+            <div>
+              <div style="font-size:.8rem; font-weight:700; margin-bottom:.5rem; color:var(--accent);">NET-ERL-001 · <code>net_erl_hall_module</code></div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>GPIO</th><th><span class="de">Funktion</span><span class="en">Function</span></th><th>Detail</th></tr></thead>
+                  <tbody>
+                    <tr><td>GPIO10</td><td>Relais</td><td>active-HIGH</td></tr>
+                    <tr><td>GPIO7</td><td>PIR</td><td>HIGH = <span class="de">Bewegung</span><span class="en">motion</span></td></tr>
+                    <tr><td>GPIO0</td><td>I2C SDA</td><td>BME280 + VEML7700</td></tr>
+                    <tr><td>GPIO1</td><td>I2C SCL</td><td>5 kHz</td></tr>
+                    <tr><td>GPIO2</td><td>Setup-Button</td><td>active-LOW, 5 s halten</td></tr>
+                    <tr><td>GPIO6</td><td>Setup-LED</td><td>active-HIGH, 500 ms blink</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="tag-row" style="margin-top:.5rem;">
+                <span class="tag blue">BME280 0x76</span><span class="tag blue">VEML7700</span><span class="tag">PIR</span><span class="tag">Auto-Light</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:.8rem; font-weight:700; margin-bottom:.5rem; color:var(--accent);">NET-ERL-002 · <code>net_erl_hall_module_led_ring</code></div>
+              <div style="font-size:.82rem; color:var(--text-muted);">
+                <span class="de">Gleiche GPIO-Basis wie NET-ERL-001, zusätzlich:</span><span class="en">Same GPIO base as NET-ERL-001, additionally:</span>
+              </div>
+              <div class="tbl-wrap" style="margin-top:.4rem;">
+                <table>
+                  <thead><tr><th>GPIO</th><th><span class="de">Funktion</span><span class="en">Function</span></th></tr></thead>
+                  <tbody>
+                    <tr><td>GPIO8</td><td>NeoPixel LED-Ring</td></tr>
+                    <tr><td>—</td><td>BME680 + ENS160 + VEML7700</td></tr>
+                    <tr><td>—</td><td><span class="de">LD2410 Radar statt PIR</span><span class="en">LD2410 Radar instead of PIR</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="tag-row" style="margin-top:.5rem;">
+                <span class="tag blue">BME680</span><span class="tag blue">ENS160</span><span class="tag blue">LD2410</span><span class="tag purple">NeoPixel</span>
+              </div>
+            </div>
+          </div>
+          <div class="note info" style="margin-top:.75rem;">
+            <span class="note-icon">ℹ️</span>
+            <p><span class="de">I2C-Takt bewusst auf 5 kHz gesetzt (statt Standard 100 kHz) – verhindert Übertragungsfehler auf langen/störanfälligen Busleitungen zu den Sensoren.</span><span class="en">I2C clock deliberately set to 5 kHz (instead of standard 100 kHz) – prevents transmission errors on long/interference-prone bus lines to sensors.</span></p>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>🪟 NET-ZRL — <span class="de">Rolladen-/Jalousiesteuerung (Netz)</span><span class="en">Shutter/Blind Controller (Mains)</span></summary>
+        <div>
+          <p><span class="de">2-Relais Cover-Steuerung mit vollständiger Kalibrierungs-Zustandsmaschine und Positionsschätzung während der Fahrt. 3 lokale Taster für manuellen Betrieb.</span><span class="en">2-relay cover controller with full calibration state machine and position estimation during travel. 3 local buttons for manual operation.</span></p>
+          <div class="tbl-wrap" style="margin-top:.75rem;">
+            <table>
+              <thead><tr><th>GPIO</th><th><span class="de">Funktion</span><span class="en">Function</span></th><th>Detail</th></tr></thead>
+              <tbody>
+                <tr><td>GPIO10</td><td><span class="de">Relais Auf</span><span class="en">Relay Up</span></td><td>active-HIGH</td></tr>
+                <tr><td>GPIO5</td><td><span class="de">Relais Ab</span><span class="en">Relay Down</span></td><td>active-HIGH</td></tr>
+                <tr><td>GPIO20</td><td><span class="de">Taster Auf</span><span class="en">Button Up</span></td><td></td></tr>
+                <tr><td>GPIO4</td><td><span class="de">Taster Ab</span><span class="en">Button Down</span></td><td></td></tr>
+                <tr><td>GPIO3</td><td><span class="de">Taster Stop</span><span class="en">Button Stop</span></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="tag-row" style="margin-top:.5rem;">
+            <span class="tag purple">NET-ZRL-002</span><span class="tag"><code>net_zrl_shutter_module</code></span><span class="tag">Cover</span><span class="tag">Kalibrierung</span>
+          </div>
+          <div class="note warn" style="margin-top:.75rem;">
+            <span class="note-icon">⚠️</span>
+            <p><span class="de">Das NET-ZRL-Modul schaltet 230V-Motoren. Verdrahtung nur durch Elektrofachkraft oder nach den einschlägigen Normen. Die Relais dürfen nie gleichzeitig Auf und Ab schalten.</span><span class="en">The NET-ZRL module switches 230V motors. Wiring only by a qualified electrician or per applicable standards. The relays must never activate Up and Down simultaneously.</span></p>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>🌤️ NET-SEN — <span class="de">Netzversorgter Sensorknoten</span><span class="en">Mains-powered Sensor Node</span></summary>
+        <div>
+          <p><span class="de">Wetterstation und Umgebungssensing. BME280 für Temperatur/Feuchte/Druck, VEML7700 für Beleuchtungsstärke, digitaler Regeneingang. Kein Aktor.</span><span class="en">Weather station and environmental sensing. BME280 for temperature/humidity/pressure, VEML7700 for illuminance, digital rain input. No actuator.</span></p>
+          <div class="tag-row" style="margin-top:.5rem;">
+            <span class="tag green">NET-SEN-002</span><span class="tag"><code>net_sen_weather_station</code></span><span class="tag blue">BME280</span><span class="tag blue">VEML7700</span><span class="tag">Regen-Eingang</span>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>🔋 BAT-SEN — <span class="de">Batteriebetriebene Sensorknoten</span><span class="en">Battery-powered Sensor Nodes</span></summary>
+        <div>
+          <p><span class="de">Deep-Sleep-Geräte mit ereignisbasiertem Reporting. GPIO-Wake oder Timer-Wake. Der Master hat ein 5-Sekunden-RX-Fenster nach dem Wake um Konfigurationen zu senden.</span><span class="en">Deep-sleep devices with event-based reporting. GPIO wake or timer wake. The master has a 5-second RX window after wake to send configurations.</span></p>
+          <div class="arch-grid" style="margin-top:.75rem;">
+            <div>
+              <div style="font-size:.8rem; font-weight:700; margin-bottom:.4rem; color:var(--orange);">BAT-SEN-01 · <code>bat_sen_window_contact</code></div>
+              <div style="font-size:.82rem; color:var(--text-muted); margin-bottom:.4rem;"><span class="de">Reed-Kontakt, CR2032, GPIO-Wake bei Zustandsänderung</span><span class="en">Reed contact, CR2032, GPIO wake on state change</span></div>
+              <div class="tag-row">
+                <span class="tag orange">CR2032</span><span class="tag">GPIO-Wake</span><span class="tag">Sleep-Event</span><span class="tag">15 min Heartbeat</span>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:.8rem; font-weight:700; margin-bottom:.4rem; color:var(--orange);">BAT-SEN-02 · <code>bat_sen_rain_sensor</code></div>
+              <div style="font-size:.82rem; color:var(--text-muted); margin-bottom:.4rem;"><span class="de">ADC Regensensor, 2× AA, Timer-Wake alle 15 Minuten</span><span class="en">ADC rain sensor, 2× AA, timer wake every 15 minutes</span></div>
+              <div class="tag-row">
+                <span class="tag orange">2× AA</span><span class="tag">Timer-Wake</span><span class="tag">ADC</span>
+              </div>
+            </div>
+          </div>
+          <div class="note tip" style="margin-top:.75rem;">
+            <span class="note-icon">💡</span>
+            <p><span class="de">Setup-Button kurz drücken sperrt/entsperrt Deep-Sleep für Testbetrieb am Gerät – so kann man im Betrieb debuggen ohne die Batterie schnell zu entladen.</span><span class="en">Short press of setup button locks/unlocks deep sleep for testing at the device – lets you debug without quickly draining the battery.</span></p>
+          </div>
+        </div>
+      </details>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── BASE → DEVICE FIRMWARE GUIDE ── -->
+<section id="guide-adapt">
+  <div class="container">
+    <div class="section-label"><span class="de">Eigene Firmware</span><span class="en">Custom Firmware</span></div>
+    <h2><span class="de">Base-Firmware zu eigenem Gerät umschreiben</span><span class="en">Adapting a base firmware to your own device</span></h2>
+    <p class="section-desc">
+      <span class="de">Jedes Gerät im Repo folgt demselben Muster: ein schlanker Basistyp (<code>basetypes/</code>) enthält die ganze Funk-, MQTT- und Provisioning-Logik. Das konkrete Gerät (<code>devices/</code>) ergänzt nur noch Hardware-spezifisches: Pins, Sensoren und Konfigurationswerte.</span>
+      <span class="en">Every device in the repo follows the same pattern: a lean base type (<code>basetypes/</code>) contains all the radio, MQTT and provisioning logic. The concrete device (<code>devices/</code>) only adds hardware-specific things: pins, sensors and configuration values.</span>
+    </p>
+
+    <div class="arch-grid" style="margin-bottom:1.5rem;">
+      <div class="arch-box">
+        <h4><span class="de">📁 Basistyp (nicht anfassen)</span><span class="en">📁 Base type (don't touch)</span></h4>
+        <div style="font-size:.83rem; color:var(--text-muted); display:grid; gap:.3rem; margin-top:.4rem;">
+          <div>→ ESP-NOW senden / empfangen</div>
+          <div>→ MQTT publish / subscribe</div>
+          <div>→ Setup-Portal (Provisioning)</div>
+          <div>→ HELLO / HEARTBEAT / STATE / ACK</div>
+          <div>→ Auto-Light, Cover-Zustandsmaschine</div>
+          <div>→ Sensor-Recovery, Watchdog</div>
+        </div>
+      </div>
+      <div class="arch-box">
+        <h4><span class="de">📁 Device-Code (dein Code)</span><span class="en">📁 Device code (your code)</span></h4>
+        <div style="font-size:.83rem; color:var(--text-muted); display:grid; gap:.3rem; margin-top:.4rem;">
+          <div>→ <code>DeviceConfig.h</code> — Geräte-ID, Capabilities, Intervalle</div>
+          <div>→ <code>PinConfig.h</code> — GPIO-Zuordnung</div>
+          <div>→ <code>main.cpp</code> — Sensor-Init und Hook-Implementierung</div>
+          <div>→ Hooks: <code>on_config()</code>, <code>on_sensor()</code>, <code>on_control()</code></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:1rem;"><span class="de">Schritt-für-Schritt: Neues Gerät ableiten</span><span class="en">Step-by-step: Derive a new device</span></h3>
+
+    <div class="guide-grid">
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">1</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Basistyp wählen</span><span class="en">Choose base type</span></h4>
+          <p><span class="de">Passendes Basetype aus <code>firmware/src/basetypes/</code> wählen:</span><span class="en">Choose the right basetype from <code>firmware/src/basetypes/</code>:</span></p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Basistyp</th><th><span class="de">Einsatz</span><span class="en">Use case</span></th></tr></thead>
+              <tbody>
+                <tr><td><code>net_erl</code></td><td><span class="de">Netz, 1 Relais, Licht/Komfort, Sensoren</span><span class="en">Mains, 1 relay, light/comfort, sensors</span></td></tr>
+                <tr><td><code>net_zrl</code></td><td><span class="de">Netz, 2 Relais, Cover (Rollladen)</span><span class="en">Mains, 2 relays, cover (shutter)</span></td></tr>
+                <tr><td><code>net_sen</code></td><td><span class="de">Netz, nur Sensorik, kein Aktor</span><span class="en">Mains, sensors only, no actuator</span></td></tr>
+                <tr><td><code>bat_sen</code></td><td><span class="de">Batterie, Deep-Sleep, GPIO/Timer-Wake</span><span class="en">Battery, deep sleep, GPIO/timer wake</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">2</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Device-Ordner anlegen</span><span class="en">Create device folder</span></h4>
+          <p><span class="de">Ein bestehendes Device als Vorlage kopieren – z.B. für ein neues Relaisgerät auf Basis von <code>net_erl_hall_module</code>:</span><span class="en">Copy an existing device as a template – e.g. for a new relay device based on <code>net_erl_hall_module</code>:</span></p>
+          <pre><code>cp -r firmware/src/devices/net_erl_hall_module \
+       firmware/src/devices/mein_neues_geraet</code></pre>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">3</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><code>DeviceConfig.h</code> <span class="de">anpassen</span><span class="en">adapt</span></h4>
+          <p><span class="de">Hier legst du Identität und Fähigkeiten des Geräts fest. Minimum das Folgende ändern:</span><span class="en">Here you define the device's identity and capabilities. At minimum change the following:</span></p>
+          <pre><code>#define NET_ERL_DEVICE_ID   "NET-ERL-MY-001"  // eindeutige ID
+#define NET_ERL_DEVICE_NAME "Mein Gerät"
+#define NET_ERL_FW_VARIANT  "mein_neues_geraet"
+
+// Capabilities: welche Daten sendet das Gerät?
+#define NET_ERL_DEVICE_CAPS (SH_CAP_RELAY | SH_CAP_TEMP | SH_CAP_HUM)</code></pre>
+          <details style="margin-top:.5rem; border-color:var(--border);">
+            <summary style="font-size:.82rem;"><span class="de">Alle Capability-Flags anzeigen</span><span class="en">Show all capability flags</span></summary>
+            <div>
+              <div class="tbl-wrap">
+                <table>
+                  <thead><tr><th>Flag</th><th>Bit</th><th><span class="de">Bedeutung</span><span class="en">Meaning</span></th></tr></thead>
+                  <tbody>
+                    <tr><td><code>SH_CAP_RELAY</code></td><td>0</td><td>Relais 1</td></tr>
+                    <tr><td><code>SH_CAP_RELAY2</code></td><td>1</td><td>Relais 2</td></tr>
+                    <tr><td><code>SH_CAP_TEMP</code></td><td>2</td><td><span class="de">Temperatur</span><span class="en">Temperature</span></td></tr>
+                    <tr><td><code>SH_CAP_HUM</code></td><td>3</td><td><span class="de">Feuchte</span><span class="en">Humidity</span></td></tr>
+                    <tr><td><code>SH_CAP_LUX</code></td><td>4</td><td><span class="de">Beleuchtungsstärke</span><span class="en">Illuminance</span></td></tr>
+                    <tr><td><code>SH_CAP_AQI</code></td><td>5</td><td>Air Quality Index</td></tr>
+                    <tr><td><code>SH_CAP_MOTION</code></td><td>6</td><td><span class="de">Bewegung</span><span class="en">Motion</span></td></tr>
+                    <tr><td><code>SH_CAP_WINDOW</code></td><td>7</td><td><span class="de">Fensterkontakt</span><span class="en">Window contact</span></td></tr>
+                    <tr><td><code>SH_CAP_RAIN</code></td><td>8</td><td>Regen / Rain</td></tr>
+                    <tr><td><code>SH_CAP_BATTERY</code></td><td>9</td><td><span class="de">Batteriebetrieb</span><span class="en">Battery powered</span></td></tr>
+                    <tr><td><code>SH_CAP_MULTIBUTTON</code></td><td>10</td><td><span class="de">Mehrere Taster</span><span class="en">Multiple buttons</span></td></tr>
+                    <tr><td><code>SH_CAP_COVER</code></td><td>11</td><td>Cover / Rollladen</td></tr>
+                    <tr><td><code>SH_CAP_LED</code></td><td>12</td><td>LED-Ring / NeoPixel</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">4</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><code>PinConfig.h</code> <span class="de">anpassen</span><span class="en">adapt</span></h4>
+          <p><span class="de">GPIO-Zuordnung für dein konkretes Board eintragen. Die Pinbezeichnungen bleiben gleich, nur die Werte ändern sich:</span><span class="en">Enter GPIO assignments for your specific board. The pin names stay the same, only the values change:</span></p>
+          <pre><code>#define PIN_RELAY_1         10   // dein Relais-GPIO
+#define PIN_SENSOR_SDA       0   // I2C SDA
+#define PIN_SENSOR_SCL       1   // I2C SCL
+#define PIN_PIR              7   // PIR (oder -1 wenn nicht vorhanden)
+#define SETUP_BUTTON_PIN     2
+#define SETUP_INDICATOR_LED_PIN 6</code></pre>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">5</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><code>main.cpp</code> <span class="de">Hooks implementieren</span><span class="en">implement hooks</span></h4>
+          <p><span class="de">Der Basistyp ruft drei Hooks auf die du in <code>main.cpp</code> implementierst:</span><span class="en">The base type calls three hooks that you implement in <code>main.cpp</code>:</span></p>
+          <pre><code>// Wird beim Start aufgerufen: Sensoren initialisieren
+void on_config() {
+    Wire.begin(PIN_SENSOR_SDA, PIN_SENSOR_SCL, NET_ERL_I2C_CLOCK_HZ);
+    bme.begin(NET_ERL_BME280_ADDRESS);
+}
+
+// Wird periodisch aufgerufen: Sensorwerte lesen
+void on_sensor(SensorData* data) {
+    data->temperature = bme.readTemperature();
+    data->humidity    = bme.readHumidity();
+    data->lux         = veml.readLux();
+}
+
+// Wird bei eingehenden MQTT-Befehlen aufgerufen
+void on_control(ControlCmd* cmd) {
+    if (cmd->type == CMD_RELAY) {
+        digitalWrite(PIN_RELAY_1, cmd->relay_state ? HIGH : LOW);
+    }
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="guide-step">
+        <div class="guide-step-num"><div class="step-circle">6</div><div class="step-line"></div></div>
+        <div class="guide-step-body">
+          <h4><span class="de">Environment in platformio.ini eintragen</span><span class="en">Add environment to platformio.ini</span></h4>
+          <p><span class="de">Am Ende der <code>firmware/platformio.ini</code> ein neues Environment hinzufügen:</span><span class="en">Add a new environment at the bottom of <code>firmware/platformio.ini</code>:</span></p>
+          <pre><code>[env:mein_neues_geraet]
+board = esp32-c3-devkitm-1
+build_src_filter = -&lt;*&gt; +&lt;devices/mein_neues_geraet/&gt;
+build_flags =
+    ${env.build_flags}
+    -D ARDUINO_USB_MODE=1
+    -D ARDUINO_USB_CDC_ON_BOOT=1
+lib_deps =
+    adafruit/Adafruit BME280 Library @ ^2.3.0</code></pre>
+          <div class="pre-label">PowerShell — <span class="de">danach flashen</span><span class="en">then flash</span></div>
+          <pre><code>pio run -e mein_neues_geraet --target upload</code></pre>
+        </div>
+      </div>
+
+    </div><!-- /guide-grid -->
+  </div>
+</section>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="container">
+    <p style="margin-bottom:.5rem;">
+      <span class="de">Gebaut von <a href="https://github.com/DevOpsOfChaos" target="_blank">Manuel Ries</a> · Lokales Smart Home, keine Cloud</span>
+      <span class="en">Built by <a href="https://github.com/DevOpsOfChaos" target="_blank">Manuel Ries</a> · Local smart home, no cloud</span>
+    </p>
+    <p style="font-size:.8rem;">
+      <a href="https://github.com/DevOpsOfChaos/esp32-smart-home" target="_blank">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/DevOpsOfChaos/esp32-smart-home/tree/main/docs/firmware" target="_blank"><span class="de">Firmware-Docs</span><span class="en">Firmware Docs</span></a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/DevOpsOfChaos/esp32-smart-home/blob/main/LICENSE" target="_blank">License</a>
+    </p>
+  </div>
+</footer>
+
+<script>
+  /* ── Language ── */
+  function toggleLang() {
+    const body = document.body;
+    const toDE = body.classList.contains('lang-en');
+    body.classList.toggle('lang-de', toDE);
+    body.classList.toggle('lang-en', !toDE);
+    // Re-render wizard in new language
+    const result = document.getElementById('wiz-result');
+    if (result && result.style.display !== 'none') {
+      showResult();
+    } else if (document.getElementById('wiz-questions').style.display !== 'none') {
+      renderQuestion();
+    }
+  }
+
+  /* ── Nav Drawer ── */
+  function toggleDrawer() {
+    const drawer = document.getElementById('nav-drawer');
+    const burger = document.getElementById('nav-hamburger');
+    const isOpen = drawer.classList.toggle('open');
+    burger.classList.toggle('open', isOpen);
+    burger.setAttribute('aria-expanded', isOpen);
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+  }
+  function closeDrawer() {
+    document.getElementById('nav-drawer').classList.remove('open');
+    const b = document.getElementById('nav-hamburger');
+    b.classList.remove('open'); b.setAttribute('aria-expanded','false');
+    document.body.style.overflow = '';
+  }
+  document.addEventListener('click', e => {
+    const drawer = document.getElementById('nav-drawer');
+    if (drawer.classList.contains('open') &&
+        !drawer.contains(e.target) && !document.getElementById('nav-hamburger').contains(e.target)) closeDrawer();
+  });
+  window.addEventListener('resize', () => { if (window.innerWidth > 720) closeDrawer(); });
+
+  /* ── Wizard ── */
+  const QUESTIONS = {
+    de: [
+      { q: "Nutzt du Home Assistant oder planst du es?", opts: [
+        { icon:"🏠", label:"Ja, ich nutze HA aktiv", desc:"Home Assistant ist meine zentrale Steuerung", value:"ha_yes" },
+        { icon:"🤔", label:"Vielleicht später", desc:"Ich bin noch offen", value:"ha_maybe" },
+        { icon:"🔧", label:"Nein, kein HA geplant", desc:"Ich möchte einen eigenen lokalen Stack", value:"ha_no" },
+      ]},
+      { q: "Wie ist deine Erfahrung mit Embedded-Entwicklung?", opts: [
+        { icon:"🚀", label:"Erfahren (C++, PlatformIO)", desc:"Ich kenne mich mit Microcontroller-Entwicklung aus", value:"exp_high" },
+        { icon:"📚", label:"Mittel (Hobby-Projekte)", desc:"Ich habe schon Projekte umgesetzt, bin aber kein Profi", value:"exp_mid" },
+        { icon:"🌱", label:"Einsteiger / YAML bevorzugt", desc:"Ich möchte nichts kompilieren müssen", value:"exp_low" },
+      ]},
+      { q: "Wie viel Kontrolle über das System willst du haben?", opts: [
+        { icon:"⚡", label:"Volle Kontrolle", desc:"Protokoll, Payload und Transport selbst bestimmen", value:"ctrl_full" },
+        { icon:"⚖️", label:"Gute Balance", desc:"Zuverlässig laufen ohne alles selbst bauen zu müssen", value:"ctrl_mid" },
+        { icon:"🎯", label:"Einfachheit vor Kontrolle", desc:"Geräte schnell einbinden, kein tiefer Einstieg", value:"ctrl_low" },
+      ]},
+      { q: "Was planst du mit der Hardware?", opts: [
+        { icon:"🔨", label:"Eigene PCBs bauen / anpassen", desc:"Hardware nach Repo-Design selbst fertigen", value:"hw_build" },
+        { icon:"🛒", label:"Kompatible Module kaufen & flashen", desc:"Fertige ESP32 Module nehmen und flashen", value:"hw_flash" },
+        { icon:"🔍", label:"Nur studieren / verstehen", desc:"System verstehen, noch nichts bauen", value:"hw_study" },
+      ]},
+    ],
+    en: [
+      { q: "Do you use Home Assistant or plan to?", opts: [
+        { icon:"🏠", label:"Yes, I actively use HA", desc:"Home Assistant is my central hub", value:"ha_yes" },
+        { icon:"🤔", label:"Maybe later", desc:"I'm still open to it", value:"ha_maybe" },
+        { icon:"🔧", label:"No HA planned", desc:"I want my own local stack", value:"ha_no" },
+      ]},
+      { q: "What's your embedded development experience?", opts: [
+        { icon:"🚀", label:"Experienced (C++, PlatformIO)", desc:"I know my way around microcontroller development", value:"exp_high" },
+        { icon:"📚", label:"Intermediate (hobby projects)", desc:"I've done projects but not a professional", value:"exp_mid" },
+        { icon:"🌱", label:"Beginner / prefer YAML", desc:"I don't want to compile anything", value:"exp_low" },
+      ]},
+      { q: "How much control do you want over the system?", opts: [
+        { icon:"⚡", label:"Full control", desc:"Define protocol, payload and transport myself", value:"ctrl_full" },
+        { icon:"⚖️", label:"Good balance", desc:"Reliable without building everything myself", value:"ctrl_mid" },
+        { icon:"🎯", label:"Simplicity over control", desc:"Add devices quickly, no deep dive", value:"ctrl_low" },
+      ]},
+      { q: "What do you plan to do with the hardware?", opts: [
+        { icon:"🔨", label:"Build / customize own PCBs", desc:"Manufacture hardware based on the repo design", value:"hw_build" },
+        { icon:"🛒", label:"Buy compatible modules & flash", desc:"Use off-the-shelf ESP32 modules", value:"hw_flash" },
+        { icon:"🔍", label:"Just study / understand", desc:"Understand the system, not build yet", value:"hw_study" },
+      ]},
+    ],
+  };
+
+  const RESULTS = {
+    de: {
+      custom: { icon:"⚙️", track:"Custom Firmware Track", cls:"custom",
+        summary:"Du willst die volle Kontrolle. Der Custom Firmware Track mit PlatformIO, ESP-NOW und einem lokalen Server-Stack ist genau richtig.",
+        steps:["firmware/README.md lesen – Architektur-Überblick","Secrets.h anlegen (WIFI + MQTT)","Server starten: docker compose up -d","Master flashen: pio run -e master_firmware --target upload","Gerät flashen und Setup-Portal durchlaufen"] },
+      esphome: { icon:"🏠", track:"ESPHome Track", cls:"esphome",
+        summary:"Du willst einfache Home Assistant Integration. Der ESPHome Track bietet genau das – ohne C++ oder ESP-NOW.",
+        steps:["esphome/README.md lesen","Passendes YAML aus esphome/devices/ kopieren","secrets.yaml befüllen (WLAN + OTA-Passwort)","Config validieren: .\\scripts\\check_esphome.ps1","Per USB flashen, dann in HA adoptieren"] },
+      both: { icon:"🔍", track:"Beide Tracks erkunden", cls:"both",
+        summary:"Schau dir beide Tracks an. Die Architektur ist gut dokumentiert und du kannst beide unabhängig voneinander studieren.",
+        steps:["docs/GETTING_STARTED.md lesen","README.md im Root für Überblick","Dann einen Track wählen und tief einsteigen"] },
+    },
+    en: {
+      custom: { icon:"⚙️", track:"Custom Firmware Track", cls:"custom",
+        summary:"You want full control. The custom firmware track with PlatformIO, ESP-NOW and a local server stack is exactly right.",
+        steps:["Read firmware/README.md – architecture overview","Create Secrets.h (WiFi + MQTT)","Start server: docker compose up -d","Flash master: pio run -e master_firmware --target upload","Flash device and run through setup portal"] },
+      esphome: { icon:"🏠", track:"ESPHome Track", cls:"esphome",
+        summary:"You want simple Home Assistant integration. The ESPHome track gives you exactly that – without C++ or ESP-NOW.",
+        steps:["Read esphome/README.md","Copy matching YAML from esphome/devices/","Fill secrets.yaml (WiFi + OTA password)","Validate config: .\\scripts\\check_esphome.ps1","Flash via USB, then adopt in HA"] },
+      both: { icon:"🔍", track:"Explore Both Tracks", cls:"both",
+        summary:"Look at both tracks. The architecture is well documented and you can study them independently.",
+        steps:["Read docs/GETTING_STARTED.md","Read root README.md for overview","Then pick one track and dive deep"] },
+    },
+  };
+
+  let wizAnswers = [], wizStep = 0;
+  function getLang() { return document.body.classList.contains('lang-de') ? 'de' : 'en'; }
+
+  function renderProgress() {
+    const lang = getLang(), q = QUESTIONS[lang];
+    document.getElementById('wiz-progress').innerHTML = q.map((_,i) => {
+      let c = 'progress-dot';
+      if (i < wizStep) c += ' done'; else if (i === wizStep) c += ' active';
+      return `<div class="${c}"></div>`;
+    }).join('');
+  }
+
+  function renderQuestion() {
+    const lang = getLang(), q = QUESTIONS[lang][wizStep];
+    document.getElementById('wiz-q').textContent = q.q;
+    document.getElementById('wiz-counter').textContent = lang==='de'
+      ? `Frage ${wizStep+1} von ${QUESTIONS[lang].length}`
+      : `Question ${wizStep+1} of ${QUESTIONS[lang].length}`;
+    document.getElementById('wiz-opts').innerHTML = q.opts.map((o,i) =>
+      `<div class="wizard-opt${wizAnswers[wizStep]===o.value?' selected':''}" onclick="wizSelect('${o.value}',${i})">
+        <span class="opt-icon">${o.icon}</span>
+        <div><div class="opt-label">${o.label}</div><div class="opt-desc">${o.desc}</div></div>
+      </div>`
+    ).join('');
+    document.getElementById('wiz-back').disabled = wizStep === 0;
+    renderProgress();
+  }
+
+  function wizSelect(value, idx) {
+    wizAnswers[wizStep] = value;
+    document.querySelectorAll('.wizard-opt').forEach((el,i) => el.classList.toggle('selected', i===idx));
+    setTimeout(() => {
+      if (wizStep < QUESTIONS[getLang()].length - 1) { wizStep++; renderQuestion(); }
+      else showResult();
+    }, 340);
+  }
+
+  function wizBack() { if (wizStep>0) { wizStep--; renderQuestion(); } }
+
+  function calcResult() {
+    const a = wizAnswers;
+    let c=0, e=0;
+    if (a[0]==='ha_yes') e+=3; if (a[0]==='ha_maybe'){e++;c++;} if (a[0]==='ha_no') c+=3;
+    if (a[1]==='exp_high') c+=3; if (a[1]==='exp_mid'){c++;e++;} if (a[1]==='exp_low') e+=3;
+    if (a[2]==='ctrl_full') c+=3; if (a[2]==='ctrl_mid'){c++;e++;} if (a[2]==='ctrl_low') e+=3;
+    if (a[3]==='hw_build') c+=2; if (a[3]==='hw_flash') e+=1; if (a[3]==='hw_study') return 'both';
+    if (Math.abs(c-e)<=2) return 'both';
+    return c>e ? 'custom' : 'esphome';
+  }
+
+  function buildReasons(track) {
+    const lang = getLang(), a = wizAnswers, r = [];
+    if (lang==='de') {
+      if (track==='custom') {
+        if (a[0]==='ha_no') r.push("Kein Home Assistant geplant → kein Vorteil durch ESPHome");
+        if (a[1]==='exp_high') r.push("C++/PlatformIO-Erfahrung wird im Custom Track voll genutzt");
+        if (a[2]==='ctrl_full') r.push("Volle Kontrolle über Protokoll, Payload und Transport");
+        if (a[3]==='hw_build') r.push("Eigene PCBs profitieren vom vollständigen Hardware-Referenzdesign");
+      } else if (track==='esphome') {
+        if (a[0]==='ha_yes') r.push("Du nutzt HA aktiv → ESPHome ist der native, direkte Weg");
+        if (a[1]==='exp_low') r.push("YAML-Konfiguration statt C++ kompilieren");
+        if (a[2]==='ctrl_low') r.push("Einfache Geräteintegration ohne Protokoll-Einstieg");
+        if (a[3]==='hw_flash') r.push("Fertige Module kaufen und direkt flashen");
+      } else {
+        r.push("Deine Antworten zeigen Interesse an beiden Aspekten");
+        r.push("Beide Tracks sind gut dokumentiert und unabhängig studierbar");
+        r.push("Du kannst jederzeit wechseln – Hardware bleibt dieselbe");
+      }
+    } else {
+      if (track==='custom') {
+        if (a[0]==='ha_no') r.push("No HA planned → no advantage from ESPHome");
+        if (a[1]==='exp_high') r.push("C++/PlatformIO experience is fully used in the custom track");
+        if (a[2]==='ctrl_full') r.push("Full control over protocol, payload and transport");
+        if (a[3]==='hw_build') r.push("Custom PCBs benefit from the full hardware reference design");
+      } else if (track==='esphome') {
+        if (a[0]==='ha_yes') r.push("You actively use HA → ESPHome is the native, direct path");
+        if (a[1]==='exp_low') r.push("YAML configuration instead of compiling C++");
+        if (a[2]==='ctrl_low') r.push("Simple device integration without protocol knowledge");
+        if (a[3]==='hw_flash') r.push("Buy ready modules and flash them directly");
+      } else {
+        r.push("Your answers show interest in both aspects");
+        r.push("Both tracks are well documented and independently studyable");
+        r.push("You can switch at any time – hardware stays the same");
+      }
+    }
+    if (!r.length) r.push(lang==='de' ? "Basierend auf deinen Antworten ist dies die beste Empfehlung" : "Based on your answers, this is the best recommendation");
+    return r;
+  }
+
+  function showResult() {
+    const lang = getLang(), track = calcResult();
+    const res = RESULTS[lang][track], reasons = buildReasons(track);
+    document.getElementById('wiz-questions').style.display = 'none';
+    const el = document.getElementById('wiz-result'); el.style.display = 'block';
+    document.getElementById('res-icon').textContent = res.icon;
+    const te = document.getElementById('res-track'); te.textContent = res.track; te.className = `result-track ${res.cls}`;
+    document.getElementById('res-summary').textContent = res.summary;
+    document.getElementById('res-reasons').innerHTML = reasons.map(r=>`<div class="reason-item"><span class="reason-check">✓</span><span>${r}</span></div>`).join('');
+    document.getElementById('res-steps').innerHTML = res.steps.map((s,i)=>`<div class="next-step"><span class="step-num-sm">${i+1}</span><span>${s}</span></div>`).join('');
+    document.getElementById('wiz-progress').innerHTML = QUESTIONS[lang].map(()=>`<div class="progress-dot done"></div>`).join('');
+  }
+
+  function wizRestart() {
+    wizAnswers=[]; wizStep=0;
+    document.getElem
